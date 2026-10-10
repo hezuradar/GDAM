@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "compras-gdam",
+  "compatibility_date": "2026-10-06",
+  "observability": {
+    "enabled": true
+  },
+  // Static web app (dist/). public/_headers sets the COOP/COEP headers SQLite needs in the browser.
+  "assets": {
+    "directory": "dist",
+    // Client-side routes (/proveedores, /pedido/3…) are served by index.html.
+    "not_found_handling": "single-page-application"
+  }
+}

@@ -2,12 +2,16 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { SQLiteProvider } from 'expo-sqlite';
 import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { Button } from '@/components/ui/Button';
 import { DATABASE_NAME, migrateDb } from '@/db/schema';
 import { spacing, typography, useTheme } from '@/theme/theme';
 
 const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
-  text: { ...typography.body, textAlign: 'center' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.lg },
+  title: { ...typography.title, textAlign: 'center' },
+  text: { ...typography.body, textAlign: 'center', maxWidth: 480 },
+  // Row wrapper: Button grows along the main axis, so in a column it would stretch vertically.
+  action: { flexDirection: 'row', minWidth: 200 },
 });
 
 export default function RootLayout() {
@@ -22,9 +26,21 @@ export default function RootLayout() {
   }, [theme]);
 
   if (dbError) {
+    // The browser database (OPFS) can only be open in one tab/window at a time.
+    const isLockedByOtherTab = /NoModificationAllowed|createSyncAccessHandle|locked/i.test(dbError);
     return (
       <View style={[styles.center, { backgroundColor: theme.colors.background }]} accessibilityRole="alert">
-        <Text style={[styles.text, { color: theme.colors.text }]}>No se pudo abrir la base de datos: {dbError}</Text>
+        <Text style={[styles.title, { color: theme.colors.text }]}>
+          {isLockedByOtherTab ? 'La app ya está abierta en otra pestaña' : 'No se pudo abrir la base de datos'}
+        </Text>
+        <Text style={[styles.text, { color: theme.colors.textSecondary }]}>
+          {isLockedByOtherTab
+            ? 'Solo puede usarse en una pestaña o ventana a la vez. Cierra las demás (o la app instalada) y pulsa Reintentar.'
+            : dbError}
+        </Text>
+        <View style={styles.action}>
+          <Button label="Reintentar" icon="refresh" onPress={() => window.location.reload()} />
+        </View>
       </View>
     );
   }

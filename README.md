@@ -54,21 +54,24 @@ Para abrirla desde el móvil en la misma red Wi‑Fi, usa `HOST=0.0.0.0 npm run 
 de `localhost` el navegador exige **HTTPS** para guardar datos y para instalar la app, así que para el uso diario
 publícala en un hosting con HTTPS.
 
-### Publicarla (Cloudflare Pages)
+### Publicarla (Cloudflare Workers)
 
-El código está en <https://github.com/hezuradar/GDAM>. Cloudflare Pages lo compila y publica solo en cada `git push`.
+- **Web publicada:** <https://compras-gdam.compras-proveedores.workers.dev>
+- **Código:** <https://github.com/hezuradar/GDAM>
 
-1. En <https://dash.cloudflare.com>, ve a **Workers y Pages → Crear → Pages → Conectar con Git** y elige
-   `hezuradar/GDAM`.
-2. Configuración de compilación:
-   - **Framework**: *Ninguno*
-   - **Comando de compilación**: `npm run build`
-   - **Directorio de salida**: `dist`
-   - La versión de Node la toma de `.node-version`.
-3. Pulsa **Guardar e implementar**. La web queda en `https://<nombre>.pages.dev`, con HTTPS. Las cabeceras de
-   `public/_headers` se aplican solas.
+Para publicar una versión nueva (la primera vez, `npx wrangler login`):
 
-Cualquier otro hosting también vale, porque `dist/` es una web estática. Cualquier hosting con HTTPS sirve, siempre que envíe estas dos cabeceras (sin ellas la base
+```bash
+npm run deploy   # compila (npm run build) y sube dist/ con Wrangler
+```
+
+`wrangler.jsonc` define el Worker `compras-gdam`, que sirve `dist/` como web estática. Las rutas internas
+(`/proveedores`, `/pedido/3`…) devuelven `index.html`, y las cabeceras de `public/_headers` se aplican solas.
+
+Cualquier otro hosting también vale, porque `dist/` es una web estática.
+
+**Importante:** la base de datos del navegador solo puede estar abierta en **una pestaña o ventana a la vez**. Si la app
+ya está abierta en otra pestaña (o instalada y abierta en paralelo), aparece un aviso para cerrarla y reintentar. Cualquier hosting con HTTPS sirve, siempre que envíe estas dos cabeceras (sin ellas la base
 de datos no puede abrirse):
 
 ```
