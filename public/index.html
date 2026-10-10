@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <!-- viewport-fit=cover: draw under the notch/home bar; safe areas are handled with env(safe-area-inset-*).
+         Zoom stays enabled (accessibility); inputs use ≥16px text so iOS does not auto-zoom on focus. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Compras a proveedores</title>
+    <meta name="description" content="Gestión de pedidos a proveedores: listas de WhatsApp, costes, seguimiento y pagos." />
+
+    <!-- Installable web app (PWA) -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#FFFFFF" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1C1C1E" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Compras" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="format-detection" content="telephone=no" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      html,
+      body {
+        height: 100%;
+      }
+      /* dvh follows the mobile browser's collapsing address bar */
+      @supports (height: 100dvh) {
+        html,
+        body {
+          height: 100dvh;
+        }
+      }
+      body {
+        overflow: hidden;
+        margin: 0;
+        background-color: #f2f2f7;
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+        -webkit-tap-highlight-color: transparent;
+        overscroll-behavior: none;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          background-color: #000000;
+        }
+      }
+      /* No double-tap-to-zoom delay on buttons and links */
+      a,
+      button,
+      input,
+      textarea,
+      [role='button'],
+      [role='checkbox'],
+      [role='radio'],
+      [role='tab'] {
+        touch-action: manipulation;
+      }
+      /* Visible keyboard focus (WCAG 2.4.7) without affecting touch users */
+      :focus-visible {
+        outline: 3px solid #0b57c9;
+        outline-offset: 2px;
+      }
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+    </style>
+  </head>
+
+  <body>
+    <noscript>Activa JavaScript para usar esta aplicación.</noscript>
+    <div id="root"></div>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('/sw.js').catch(function () {
+            /* Offline support is optional; the app works without it. */
+          });
+        });
+      }
+    </script>
+  </body>
+</html>

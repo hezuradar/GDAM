@@ -1,0 +1,9 @@
+# Netlify / Cloudflare Pages: cross-origin isolation required by expo-sqlite on the web.
+# require-corp (not credentialless) because Safari on iPhone only supports require-corp.
+/*
+  Cross-Origin-Embedder-Policy: require-corp
+  Cross-Origin-Opener-Policy: same-origin
+  X-Content-Type-Options: nosniff
+
+/sw.js
+  Cache-Control: no-cache
