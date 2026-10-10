@@ -59,7 +59,11 @@ publícala en un hosting con HTTPS.
 - **Web publicada:** <https://compras-gdam.compras-proveedores.workers.dev>
 - **Código:** <https://github.com/hezuradar/GDAM>
 
-Para publicar una versión nueva (la primera vez, `npx wrangler login`):
+**Se publica sola:** cada `git push` a `main` hace que Cloudflare (Workers Builds) ejecute `npm run build` y
+`npx wrangler deploy`. El estado de cada publicación se ve en el panel de Cloudflare: Workers → compras-gdam →
+Deployments.
+
+Para publicar a mano desde el ordenador (la primera vez, `npx wrangler login`):
 
 ```bash
 npm run deploy   # compila (npm run build) y sube dist/ con Wrangler
