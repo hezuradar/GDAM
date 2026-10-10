@@ -1,13 +1,12 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { announce, announceErrors, confirmDestructive, showError } from '@/components/ui/alerts';
 import { Button } from '@/components/ui/Button';
 import { FormScroll } from '@/components/ui/Layout';
 import { TextField } from '@/components/ui/TextField';
-import { deleteLine, getLine, saveLine } from '@/db/linesRepo';
-import { getOrder } from '@/db/ordersRepo';
+import { deleteLine, getLine, saveLine } from '@/api/data';
+import { getOrder } from '@/api/data';
 import { formatQuantity } from '@/domain/exportText';
 import { centsToInput, parseAmount, parseDecimal } from '@/domain/money';
 import type { Currency } from '@/domain/types';
@@ -17,7 +16,6 @@ import { typography, useThemedStyles, type Theme } from '@/theme/theme';
 type Errors = Partial<Record<'quantity' | 'pieceType' | 'price', string>>;
 
 export default function LineFormScreen() {
-  const db = useSQLiteContext();
   const styles = useThemedStyles(makeStyles);
   const params = useLocalSearchParams<{ orderId: string; id?: string }>();
   const orderId = parseIdParam(params.orderId) ?? 0;
@@ -33,7 +31,7 @@ export default function LineFormScreen() {
 
   useEffect(() => {
     const load = async () => {
-      const [order, line] = await Promise.all([getOrder(db, orderId), id ? getLine(db, id) : null]);
+      const [order, line] = await Promise.all([getOrder(orderId), id ? getLine(id) : null]);
       if (!order || (id !== null && !line)) {
         showError('No encontrado', new Error('El pedido o la línea ya no existen.'));
         goBack();
@@ -49,7 +47,7 @@ export default function LineFormScreen() {
       }
     };
     load().catch((e: unknown) => showError('No se pudo cargar la línea', e));
-  }, [db, orderId, id]);
+  }, [orderId, id]);
 
   const handleSave = async () => {
     const qty = parseDecimal(quantity.trim());
@@ -62,7 +60,7 @@ export default function LineFormScreen() {
     if (!announceErrors(found) || qty === null || isSaving) return;
     setSaving(true);
     try {
-      await saveLine(db, orderId, { quantity: qty, pieceType, measurements, unitPriceCents, rawText }, id);
+      await saveLine(orderId, { quantity: qty, pieceType, measurements, unitPriceCents, rawText }, id);
       announce('Línea guardada');
       goBack();
     } catch (e: unknown) {
@@ -79,7 +77,7 @@ export default function LineFormScreen() {
       message: `${quantity} ${pieceType} ${measurements}`.trim(),
       confirmLabel: 'Eliminar',
       onConfirm: () => {
-        deleteLine(db, id)
+        deleteLine(id)
           .then(() => goBack())
           .catch((e: unknown) => showError('No se pudo eliminar', e));
       },

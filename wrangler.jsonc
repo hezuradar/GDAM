@@ -1,14 +1,36 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "compras-gdam",
+  "main": "src/worker/index.ts",
   "compatibility_date": "2026-10-06",
   "observability": {
     "enabled": true
   },
-  // Static web app (dist/). public/_headers sets the COOP/COEP headers SQLite needs in the browser.
+  // Static web app (dist/) + JSON API under /api/* handled by the Worker.
   "assets": {
     "directory": "dist",
+    "binding": "ASSETS",
     // Client-side routes (/proveedores, /pedido/3…) are served by index.html.
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "compras-db",
+      "database_id": "3f20d9bb-54ae-43cd-9e7e-48ca21f2b506",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // Hourly EUR/USD market rate refresh.
+  "triggers": {
+    "crons": ["7 * * * *"]
+  },
+  // ALLOWED_EMAILS (comma-separated Access identities allowed to use the API) is a Worker secret,
+  // kept out of this public repository: `npx wrangler secret put ALLOWED_EMAILS`.
+  "vars": {
+    // Filled in after enabling Cloudflare Access (see README). Empty = API closed.
+    "ACCESS_TEAM_DOMAIN": "",
+    "ACCESS_AUD": ""
   }
 }

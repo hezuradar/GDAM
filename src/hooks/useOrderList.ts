@@ -1,9 +1,4 @@
-import type { SQLiteDatabase } from 'expo-sqlite';
-import { listAllLinesForList } from '@/db/linesRepo';
-import { listOrders } from '@/db/ordersRepo';
-import { listAllPaymentsForList } from '@/db/paymentsRepo';
-import { getSettings, type AppSettings } from '@/db/settingsRepo';
-import { listSuppliers } from '@/db/suppliersRepo';
+import { loadOrderListRaw, type AppSettings } from '@/api/data';
 import type { OrderListItem } from '@/domain/orderFilters';
 import { buildOrderListItems } from '@/domain/orderList';
 import type { Supplier } from '@/domain/types';
@@ -14,15 +9,9 @@ export interface OrderListData {
   readonly settings: AppSettings;
 }
 
-/** Loads everything the order list needs in parallel and joins it in memory. */
-export async function loadOrderList(db: SQLiteDatabase): Promise<OrderListData> {
-  const [orders, lines, payments, suppliers, settings] = await Promise.all([
-    listOrders(db),
-    listAllLinesForList(db),
-    listAllPaymentsForList(db),
-    listSuppliers(db),
-    getSettings(db),
-  ]);
+/** Loads everything the order list needs in one request and joins it in memory. */
+export async function loadOrderList(): Promise<OrderListData> {
+  const { orders, lines, payments, suppliers, settings } = await loadOrderListRaw();
   const items = buildOrderListItems({
     orders,
     lines,

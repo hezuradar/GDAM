@@ -1,5 +1,4 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { announce, announceErrors, confirmDestructive, showError } from '@/components/ui/alerts';
@@ -8,7 +7,7 @@ import { ChipGroup } from '@/components/ui/ChipGroup';
 import { DateField } from '@/components/ui/DateField';
 import { Card, EmptyState, ErrorView, FormScroll, InfoRow, LoadingView } from '@/components/ui/Layout';
 import { TextField } from '@/components/ui/TextField';
-import { deletePayment, getPayment, savePayment } from '@/db/paymentsRepo';
+import { deletePayment, getPayment, savePayment } from '@/api/data';
 import { todayIso } from '@/domain/dates';
 import { centsToInput, convert, formatMoney, formatRate, parseAmount, parseRate } from '@/domain/money';
 import { CURRENCIES, PAYMENT_METHODS, type Currency, type PaymentMethod } from '@/domain/types';
@@ -20,7 +19,6 @@ import { typography, useThemedStyles, type Theme } from '@/theme/theme';
 type Errors = Partial<Record<'amount' | 'rate', string>>;
 
 export default function PaymentFormScreen() {
-  const db = useSQLiteContext();
   const styles = useThemedStyles(makeStyles);
   const params = useLocalSearchParams<{ orderId: string; id?: string }>();
   const orderId = parseIdParam(params.orderId) ?? 0;
@@ -37,7 +35,7 @@ export default function PaymentFormScreen() {
 
   useEffect(() => {
     if (id === null) return;
-    getPayment(db, id)
+    getPayment(id)
       .then((p) => {
         if (!p) {
           showError('Pago no encontrado', new Error('Puede que se haya eliminado.'));
@@ -52,7 +50,7 @@ export default function PaymentFormScreen() {
         setNote(p.note);
       })
       .catch((e: unknown) => showError('No se pudo cargar el pago', e));
-  }, [db, id]);
+  }, [id]);
 
   if (error) return <ErrorView message={error} onRetry={reload} />;
   if (!data) {
@@ -74,7 +72,7 @@ export default function PaymentFormScreen() {
     if (!announceErrors(found) || amountCents === null || isSaving) return;
     setSaving(true);
     try {
-      await savePayment(db, order.id, { amountCents, currency: payCurrency, paidOn, method, fxRateMicros: rateMicros, note }, id);
+      await savePayment(order.id, { amountCents, currency: payCurrency, paidOn, method, fxRateMicros: rateMicros, note }, id);
       announce('Pago guardado');
       goBack();
     } catch (e: unknown) {
@@ -91,7 +89,7 @@ export default function PaymentFormScreen() {
       message: amountCents ? formatMoney(amountCents, payCurrency) : '',
       confirmLabel: 'Eliminar',
       onConfirm: () => {
-        deletePayment(db, id)
+        deletePayment(id)
           .then(() => goBack())
           .catch((e: unknown) => showError('No se pudo eliminar', e));
       },

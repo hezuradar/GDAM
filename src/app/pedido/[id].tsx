@@ -1,6 +1,5 @@
 import * as Clipboard from 'expo-clipboard';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useSQLiteContext } from 'expo-sqlite';
 import { Linking, StyleSheet, Text } from 'react-native';
 import { shareText } from '@/lib/share';
 import { LinesList, PaymentsList, TotalsCard } from '@/components/orders/OrderSections';
@@ -9,7 +8,7 @@ import { StatusBadge } from '@/components/ui/Badges';
 import { Button, ButtonRow, IconButton } from '@/components/ui/Button';
 import { ChipGroup } from '@/components/ui/ChipGroup';
 import { Card, EmptyState, ErrorView, FormScroll, InfoRow, LoadingView, PressableRow, SectionHeader } from '@/components/ui/Layout';
-import { deleteOrder, updateOrderStatus } from '@/db/ordersRepo';
+import { deleteOrder, updateOrderStatus } from '@/api/data';
 import { formatDate, orderSummaryText } from '@/domain/exportText';
 import { ORDER_STATUSES, type OrderStatus } from '@/domain/types';
 import { useOrderDetail, type OrderDetail } from '@/hooks/useOrderDetail';
@@ -34,7 +33,6 @@ function summaryFor(detail: OrderDetail): string {
 
 export default function OrderDetailScreen() {
   const id = parseIdParam(useLocalSearchParams<{ id: string }>().id) ?? 0;
-  const db = useSQLiteContext();
   const styles = useThemedStyles(makeStyles);
   const { data, error, loading, reload } = useOrderDetail(id);
 
@@ -47,7 +45,7 @@ export default function OrderDetailScreen() {
     router.push({ pathname, params: { orderId: order.id, ...extra } });
 
   const changeStatus = (status: OrderStatus) =>
-    updateOrderStatus(db, order.id, status)
+    updateOrderStatus(order.id, status)
       .then(() => announce(`Estado: ${ORDER_STATUS_LABEL[status]}`))
       .then(reload)
       .catch((e: unknown) => showError('No se pudo cambiar el estado', e));
@@ -78,7 +76,7 @@ export default function OrderDetailScreen() {
       message: `Se borrarán también ${lines.length} líneas y ${payments.length} pagos. No se puede deshacer.`,
       confirmLabel: 'Eliminar pedido',
       onConfirm: () => {
-        deleteOrder(db, order.id)
+        deleteOrder(order.id)
           .then(() => goBack())
           .catch((e: unknown) => showError('No se pudo eliminar', e));
       },

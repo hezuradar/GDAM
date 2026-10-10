@@ -1,6 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 
 export interface LoaderState<T> {
   readonly data: T | null;
@@ -10,11 +9,10 @@ export interface LoaderState<T> {
 }
 
 /**
- * Runs `load` against the local database every time the screen gains focus,
- * so data edited in other screens is always fresh. Stale results are ignored.
+ * Runs `load` every time the screen gains focus, so data edited in other screens (or on
+ * another device) is always fresh. Stale results are ignored.
  */
-export function useLoader<T>(load: (db: SQLiteDatabase) => Promise<T>): LoaderState<T> {
-  const db = useSQLiteContext();
+export function useLoader<T>(load: () => Promise<T>): LoaderState<T> {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -24,7 +22,7 @@ export function useLoader<T>(load: (db: SQLiteDatabase) => Promise<T>): LoaderSt
     const id = ++requestId.current;
     setLoading(true);
     try {
-      const result = await load(db);
+      const result = await load();
       if (id === requestId.current) {
         setData(result);
         setError(null);
@@ -36,7 +34,7 @@ export function useLoader<T>(load: (db: SQLiteDatabase) => Promise<T>): LoaderSt
     } finally {
       if (id === requestId.current) setLoading(false);
     }
-  }, [db, load]);
+  }, [load]);
 
   useFocusEffect(
     useCallback(() => {

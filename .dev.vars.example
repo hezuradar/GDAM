@@ -1,0 +1,3 @@
+# Copy to .dev.vars for local development with `npm run dev` (wrangler dev).
+# Skips Cloudflare Access ONLY on localhost. Never set this in production.
+DEV_BYPASS_AUTH=1

@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { CONTENT_MAX_WIDTH, EmptyState, ErrorView, LoadingView, PressableRow } from '@/components/ui/Layout';
 import { TextField } from '@/components/ui/TextField';
-import { listSuppliers } from '@/db/suppliersRepo';
+import { listSuppliers } from '@/api/data';
 import { foldText } from '@/domain/orderFilters';
 import { useLoader } from '@/hooks/useLoader';
 import { radius, spacing, typography, useThemedStyles, type Theme } from '@/theme/theme';

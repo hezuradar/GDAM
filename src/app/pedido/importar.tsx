@@ -1,14 +1,13 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Clipboard from 'expo-clipboard';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useSQLiteContext } from 'expo-sqlite';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { announce, confirmDestructive, showError } from '@/components/ui/alerts';
 import { Button } from '@/components/ui/Button';
 import { Card, EmptyState, FormScroll, LoadingView, SectionHeader } from '@/components/ui/Layout';
 import { TextField } from '@/components/ui/TextField';
-import { importLines } from '@/db/linesRepo';
+import { importLines } from '@/api/data';
 import { formatQuantity } from '@/domain/exportText';
 import { formatMoney } from '@/domain/money';
 import type { Currency } from '@/domain/types';
@@ -31,7 +30,6 @@ function describeLine(line: ParsedLine, orderCurrency: Currency): string {
 
 export default function ImportScreen() {
   const orderId = parseIdParam(useLocalSearchParams<{ orderId: string }>().orderId) ?? 0;
-  const db = useSQLiteContext();
   const theme = useTheme();
   const styles = useThemedStyles(makeStyles);
   const { data, loading } = useOrderDetail(orderId);
@@ -74,7 +72,7 @@ export default function ImportScreen() {
     setSaving(true);
     try {
       const inputs = included.map((line) => toImportableLine(line, order.currency, totals.rateMicros));
-      await importLines(db, order.id, inputs, replaceExisting);
+      await importLines(order.id, inputs, replaceExisting);
       announce(`${inputs.length} líneas añadidas`);
       goBack();
     } catch (e: unknown) {

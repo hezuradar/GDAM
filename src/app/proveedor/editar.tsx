@@ -1,17 +1,15 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import { announce, announceErrors, showError } from '@/components/ui/alerts';
 import { Button } from '@/components/ui/Button';
 import { FormScroll } from '@/components/ui/Layout';
 import { TextField } from '@/components/ui/TextField';
-import { getSupplier, saveSupplier } from '@/db/suppliersRepo';
+import { getSupplier, saveSupplier } from '@/api/data';
 import { goBack, parseIdParam } from '@/lib/params';
 
 const MAX_NAME = 80;
 
 export default function SupplierFormScreen() {
-  const db = useSQLiteContext();
   const id = parseIdParam(useLocalSearchParams<{ id?: string }>().id);
   const [name, setName] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
@@ -21,7 +19,7 @@ export default function SupplierFormScreen() {
 
   useEffect(() => {
     if (id === null) return;
-    getSupplier(db, id)
+    getSupplier(id)
       .then((s) => {
         if (!s) {
           showError('Proveedor no encontrado', new Error('Puede que se haya eliminado.'));
@@ -33,7 +31,7 @@ export default function SupplierFormScreen() {
         setNotes(s.notes);
       })
       .catch((e: unknown) => showError('No se pudo cargar el proveedor', e));
-  }, [db, id]);
+  }, [id]);
 
   const handleSave = async () => {
     const trimmed = name.trim();
@@ -46,7 +44,7 @@ export default function SupplierFormScreen() {
     if (isSaving) return;
     setSaving(true);
     try {
-      await saveSupplier(db, { name: trimmed, whatsapp, notes }, id);
+      await saveSupplier({ name: trimmed, whatsapp, notes }, id);
       announce('Proveedor guardado');
       goBack();
     } catch (e: unknown) {

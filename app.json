@@ -18,17 +18,6 @@
     "experiments": {
       "typedRoutes": true
     },
-    "plugins": [
-      [
-        "expo-router",
-        {
-          "headers": {
-            "Cross-Origin-Embedder-Policy": "require-corp",
-            "Cross-Origin-Opener-Policy": "same-origin"
-          }
-        }
-      ],
-      "expo-sqlite"
-    ]
+    "plugins": ["expo-router"]
   }
 }

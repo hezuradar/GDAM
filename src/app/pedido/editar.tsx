@@ -1,5 +1,4 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { announce, announceErrors, showError } from '@/components/ui/alerts';
@@ -8,9 +7,9 @@ import { ChipGroup } from '@/components/ui/ChipGroup';
 import { DateField } from '@/components/ui/DateField';
 import { Card, EmptyState, FormScroll, SectionHeader } from '@/components/ui/Layout';
 import { TextField } from '@/components/ui/TextField';
-import { getOrder, saveOrder } from '@/db/ordersRepo';
-import { getSettings } from '@/db/settingsRepo';
-import { listSuppliers } from '@/db/suppliersRepo';
+import { getOrder, saveOrder } from '@/api/data';
+import { getSettings } from '@/api/data';
+import { listSuppliers } from '@/api/data';
 import { todayIso } from '@/domain/dates';
 import { centsToInput, formatRate, parseAmount, parseRate } from '@/domain/money';
 import { CURRENCIES, ORDER_STATUSES, type Currency, type OrderStatus, type Supplier } from '@/domain/types';
@@ -50,7 +49,6 @@ function validate(form: FormState): Errors {
 }
 
 export default function OrderFormScreen() {
-  const db = useSQLiteContext();
   const styles = useThemedStyles(makeStyles);
   const params = useLocalSearchParams<{ id?: string; supplierId?: string }>();
   const id = parseIdParam(params.id);
@@ -72,16 +70,14 @@ export default function OrderFormScreen() {
   const [errors, setErrors] = useState<Errors>({});
   const [isSaving, setSaving] = useState(false);
   const [defaultRate, setDefaultRate] = useState('');
-  const [fallbackRateMicros, setFallbackRateMicros] = useState(0);
   const [loadedCurrency, setLoadedCurrency] = useState<Currency | null>(null);
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm((f) => ({ ...f, [key]: value }));
 
   useEffect(() => {
     const load = async () => {
-      const [list, settings, order] = await Promise.all([listSuppliers(db), getSettings(db), id ? getOrder(db, id) : null]);
+      const [list, settings, order] = await Promise.all([listSuppliers(), getSettings(), id ? getOrder(id) : null]);
       setSuppliers(list);
       setDefaultRate(formatRate(settings.fxRateMicros));
-      setFallbackRateMicros(settings.fxRateMicros);
       if (id !== null && !order) {
         showError('Pedido no encontrado', new Error('Puede que se haya eliminado.'));
         goBack();
@@ -109,7 +105,7 @@ export default function OrderFormScreen() {
       }
     };
     load().catch((e: unknown) => showError('No se pudo cargar el pedido', e));
-  }, [db, id]);
+  }, [id]);
 
   const handleSave = async () => {
     const found = validate(form);
@@ -118,7 +114,6 @@ export default function OrderFormScreen() {
     setSaving(true);
     try {
       const savedId = await saveOrder(
-        db,
         {
           supplierId: form.supplierId,
           orderDate: form.orderDate,
@@ -134,7 +129,6 @@ export default function OrderFormScreen() {
           notes: form.notes,
         },
         id,
-        fallbackRateMicros,
       );
       announce('Pedido guardado');
       if (id === null) router.replace({ pathname: '/pedido/[id]', params: { id: savedId } });

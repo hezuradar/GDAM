@@ -1,12 +1,11 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 import { useCallback } from 'react';
 import { Linking, StyleSheet, Text, View } from 'react-native';
 import { OrderCard } from '@/components/orders/OrderCard';
 import { confirmDestructive, showError } from '@/components/ui/alerts';
 import { Button, ButtonRow, IconButton } from '@/components/ui/Button';
 import { Card, EmptyState, ErrorView, FormScroll, LoadingView, SectionHeader } from '@/components/ui/Layout';
-import { countSupplierOrders, deleteSupplier, getSupplier } from '@/db/suppliersRepo';
+import { deleteSupplier, getSupplier } from '@/api/data';
 import { filterOrders } from '@/domain/orderFilters';
 import { useLoader } from '@/hooks/useLoader';
 import { loadOrderList } from '@/hooks/useOrderList';
@@ -15,15 +14,11 @@ import { spacing, typography, useThemedStyles, type Theme } from '@/theme/theme'
 
 export default function SupplierDetailScreen() {
   const id = parseIdParam(useLocalSearchParams<{ id: string }>().id) ?? 0;
-  const db = useSQLiteContext();
   const styles = useThemedStyles(makeStyles);
-  const load = useCallback(
-    async (database: SQLiteDatabase) => {
-      const [supplier, list] = await Promise.all([getSupplier(database, id), loadOrderList(database)]);
-      return { supplier, orders: filterOrders(list.items, { supplierId: id }) };
-    },
-    [id],
-  );
+  const load = useCallback(async () => {
+    const [supplier, list] = await Promise.all([getSupplier(id), loadOrderList()]);
+    return { supplier, orders: filterOrders(list.items, { supplierId: id }) };
+  }, [id]);
   const { data, error, loading, reload } = useLoader(load);
 
   if (error) return <ErrorView message={error} onRetry={reload} />;
@@ -33,16 +28,10 @@ export default function SupplierDetailScreen() {
   const { supplier, orders } = data;
   const chatUrl = whatsappUrl(supplier.whatsapp, '');
 
-  const handleDelete = async () => {
-    let count: number;
-    try {
-      count = await countSupplierOrders(db, supplier.id);
-    } catch (e: unknown) {
-      showError('No se pudo comprobar el proveedor', e);
-      return;
-    }
-    if (count > 0) {
-      showError('No se puede eliminar', new Error(`Este proveedor tiene ${count} pedidos. Elimínalos primero.`));
+  const handleDelete = () => {
+    // The server also refuses (409) if orders were added from another device meanwhile.
+    if (orders.length > 0) {
+      showError('No se puede eliminar', new Error(`Este proveedor tiene ${orders.length} pedidos. Elimínalos primero.`));
       return;
     }
     confirmDestructive({
@@ -50,7 +39,7 @@ export default function SupplierDetailScreen() {
       message: 'Esta acción no se puede deshacer.',
       confirmLabel: 'Eliminar',
       onConfirm: () => {
-        deleteSupplier(db, supplier.id)
+        deleteSupplier(supplier.id)
           .then(() => goBack())
           .catch((e: unknown) => showError('No se pudo eliminar', e));
       },
