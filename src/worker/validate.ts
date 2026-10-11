@@ -132,6 +132,24 @@ export function parseImportInput(raw: unknown): ImportInput {
   return { lines: body.lines.map(parseLineInput), replaceExisting: body.replaceExisting };
 }
 
+export interface LinePricesInput {
+  readonly prices: readonly { readonly lineId: number; readonly unitPriceCents: number }[];
+}
+
+/** Unit prices for several lines of one order (total split among its lines). */
+export function parseLinePricesInput(raw: unknown): LinePricesInput {
+  const body = asObject(raw);
+  if (!Array.isArray(body.prices) || body.prices.length === 0 || body.prices.length > MAX_IMPORT_LINES) {
+    throw badRequest(`«prices» debe tener entre 1 y ${MAX_IMPORT_LINES} líneas`);
+  }
+  const prices = body.prices.map((item: unknown) => {
+    const price = asObject(item);
+    return { lineId: integer(price, 'lineId', 1, 999_999_999), unitPriceCents: integer(price, 'unitPriceCents', 0, MAX_CENTS) };
+  });
+  if (new Set(prices.map((p) => p.lineId)).size !== prices.length) throw badRequest('Hay líneas repetidas');
+  return { prices };
+}
+
 export interface LinePricingInput {
   readonly salePriceCents: number | null;
   readonly saleCurrency: Currency | null;

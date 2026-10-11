@@ -3,6 +3,7 @@ import {
   parseId,
   parseImportInput,
   parseLineInput,
+  parseLinePricesInput,
   parseLinePricingInput,
   parseOrderInput,
   parsePaymentInput,
@@ -114,4 +115,16 @@ describe('parseLinePricingInput', () => {
     expectBadRequest(() => parseLinePricingInput({ ...base, theoreticalCostCents: 100, theoreticalCurrency: null }), 'theoreticalCurrency'));
   it('rejects a negative theoretical value', () =>
     expectBadRequest(() => parseLinePricingInput({ ...base, theoreticalCostCents: -1, theoreticalCurrency: 'EUR' }), 'theoreticalCostCents'));
+});
+
+describe('parseLinePricesInput', () => {
+  it('accepts unit prices for several lines', () => {
+    const prices = [{ lineId: 1, unitPriceCents: 200 }, { lineId: 2, unitPriceCents: 0 }];
+    expect(parseLinePricesInput({ prices })).toEqual({ prices });
+  });
+  it('requires at least one line', () => expectBadRequest(() => parseLinePricesInput({ prices: [] }), 'prices'));
+  it('rejects negative prices', () =>
+    expectBadRequest(() => parseLinePricesInput({ prices: [{ lineId: 1, unitPriceCents: -1 }] }), 'unitPriceCents'));
+  it('rejects repeated lines', () =>
+    expectBadRequest(() => parseLinePricesInput({ prices: [{ lineId: 1, unitPriceCents: 1 }, { lineId: 1, unitPriceCents: 2 }] }), 'repetidas'));
 });

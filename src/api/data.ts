@@ -85,6 +85,9 @@ export async function saveLine(orderId: number, input: LineInput, id: number | n
   return id;
 }
 export const deleteLine = (id: number) => apiRequest('DELETE', `/lines/${id}`);
+/** Sets several unit prices of one order at once (order total split among its lines). */
+export const setLinePrices = (orderId: number, prices: readonly { lineId: number; unitPriceCents: number }[]) =>
+  apiRequest<{ count: number }>('PUT', `/orders/${orderId}/line-prices`, { prices });
 /** Adds (or replaces) lines atomically on the server. */
 export const importLines = (orderId: number, lines: readonly LineInput[], replaceExisting: boolean) =>
   apiRequest<{ count: number }>('POST', `/orders/${orderId}/lines/import`, { lines, replaceExisting });

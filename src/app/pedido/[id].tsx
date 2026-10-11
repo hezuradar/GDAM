@@ -43,7 +43,7 @@ export default function OrderDetailScreen() {
   if (!data) return <EmptyState icon="help-circle-outline" title="Pedido no encontrado" message="Puede que se haya eliminado." />;
 
   const { order, supplier, lines, payments, totals, payment } = data;
-  const go = (pathname: '/pedido/linea' | '/pedido/pago' | '/pedido/importar' | '/pedido/editar', extra: Record<string, number> = {}) =>
+  const go = (pathname: '/pedido/linea' | '/pedido/pago' | '/pedido/importar' | '/pedido/repartir' | '/pedido/editar', extra: Record<string, number> = {}) =>
     router.push({ pathname, params: { orderId: order.id, ...extra } });
 
   const changeStatus = (status: OrderStatus) =>
@@ -141,6 +141,15 @@ export default function OrderDetailScreen() {
         label="Pegar lista de WhatsApp"
         onPress={() => go('/pedido/importar')}
       />
+      {lines.length > 0 ? (
+        <Button
+          variant="secondary"
+          icon="git-branch-outline"
+          label="Repartir importe total"
+          accessibilityHint="Escribe el total del pedido y se reparte por igual entre las piezas"
+          onPress={() => go('/pedido/repartir')}
+        />
+      ) : null}
 
       <SectionHeader title="Importes" icon="calculator-outline" />
       <DisplayCurrencySwitch value={displayCurrency} onChange={setDisplayCurrency} />

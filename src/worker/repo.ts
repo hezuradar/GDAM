@@ -3,7 +3,7 @@ import { plural } from '../domain/exportText';
 import { convert, marketRates, withUsdRate } from '../domain/money';
 import { CURRENCIES, type Currency, type Order, type OrderLine, type OrderStatus, type Payment, type Supplier } from '../domain/types';
 import { HttpError, notFound } from './http';
-import type { ImportInput, LineInput, LinePricingInput, OrderInput, PaymentInput, SettingsInput, SupplierInput } from './validate';
+import type { ImportInput, LineInput, LinePricesInput, LinePricingInput, OrderInput, PaymentInput, SettingsInput, SupplierInput } from './validate';
 
 /** Data access on Cloudflare D1. Every query is parameterised; multi-statement writes use batch() (atomic). */
 
@@ -248,6 +248,20 @@ export async function importLines(db: D1Database, orderId: number, input: Import
   ];
   await db.batch(statements);
   return input.lines.length;
+}
+
+/** Sets the unit price of several lines of one order atomically; every line must belong to the order. */
+export async function setLinePrices(db: D1Database, orderId: number, input: LinePricesInput): Promise<number> {
+  await requireOrder(db, orderId);
+  const rows = await all<{ id: number }>(db, 'SELECT id FROM order_lines WHERE order_id = ?', orderId);
+  const ids = new Set(rows.map((r) => r.id));
+  if (input.prices.some((p) => !ids.has(p.lineId))) throw new HttpError(400, 'Alguna línea no pertenece a este pedido');
+  await db.batch(
+    input.prices.map((p) =>
+      db.prepare('UPDATE order_lines SET unit_price_cents = ? WHERE id = ? AND order_id = ?').bind(p.unitPriceCents, p.lineId, orderId),
+    ),
+  );
+  return input.prices.length;
 }
 
 // ---------- Products (lines with their order context) ----------
