@@ -12,6 +12,7 @@ const item = (overrides: Partial<OrderListItem>): OrderListItem => ({
   pendingCents: 1000,
   pendingPriceCount: 0,
   lineCount: 1,
+  rateMicros: 1_100_000,
   trackingNumber: '',
   searchText: '',
   ...overrides,

@@ -129,7 +129,39 @@ export function PaymentMeter({ paidCents, totalCents, currency, status, isCompac
   );
 }
 
-const FLOW: readonly OrderStatus[] = ['borrador', 'confirmado', 'enviado', 'recibido'];
+const DISPLAY_OPTIONS: readonly { value: Currency | null; label: string; a11y: string }[] = [
+  { value: null, label: 'Original', a11y: 'Moneda original de cada pedido' },
+  { value: 'EUR', label: '€', a11y: 'Euros' },
+  { value: 'USD', label: 'US$', a11y: 'Dólares' },
+];
+
+/** Segmented control to view amounts in each order's currency, in euros or in dollars. */
+export function DisplayCurrencySwitch({ value, onChange }: { value: Currency | null; onChange: (value: Currency | null) => void }) {
+  const theme = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  return (
+    <View style={styles.segmented} accessibilityRole="radiogroup" accessibilityLabel="Ver importes en">
+      <Ionicons name="swap-horizontal" size={18} color={theme.colors.textSecondary} style={styles.segmentedIcon} />
+      {DISPLAY_OPTIONS.map((option) => {
+        const isSelected = option.value === value;
+        return (
+          <Pressable
+            key={option.label}
+            onPress={() => onChange(option.value)}
+            accessibilityRole="radio"
+            accessibilityLabel={`Ver importes en: ${option.a11y}`}
+            accessibilityState={{ selected: isSelected }}
+            style={({ pressed }) => [styles.segment, isSelected && styles.segmentSelected, pressed && styles.pressed]}
+          >
+            <Text style={[styles.segmentText, isSelected && styles.segmentTextSelected]}>{option.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+const FLOW: readonly OrderStatus[] =['borrador', 'confirmado', 'enviado', 'recibido'];
 
 /** Order progress: Borrador → Confirmado → Enviado → Recibido. Cancelled orders show a banner. */
 export function StatusStepper({ status }: { status: OrderStatus }) {
@@ -236,4 +268,20 @@ const makeStyles = (theme: Theme) =>
     stepDotCurrent: { borderWidth: 3, borderColor: theme.status.confirmado.bg },
     stepLabel: { ...typography.footnote, color: theme.colors.textSecondary, textAlign: 'center' },
     stepLabelCurrent: { color: theme.colors.text, fontWeight: '700' },
+    segmented: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      padding: 3,
+      gap: 2,
+      borderRadius: radius.md,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    segmentedIcon: { marginHorizontal: spacing.xs },
+    segment: { minHeight: 38, minWidth: 48, paddingHorizontal: spacing.md, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+    segmentSelected: { backgroundColor: theme.colors.primary },
+    segmentText: { ...typography.callout, color: theme.colors.text, fontWeight: '600' },
+    segmentTextSelected: { color: theme.colors.onPrimary },
   });

@@ -1,4 +1,4 @@
-import { convert, formatMoney, formatRate, parseAmount, parseRate } from '../money';
+import { convert, displayAmount, formatMoney, formatRate, parseAmount, parseRate } from '../money';
 
 describe('parseAmount', () => {
   it.each([
@@ -52,6 +52,20 @@ describe('convert', () => {
 
   it('throws on a non-positive rate when conversion is needed', () => {
     expect(() => convert(100, 'USD', 'EUR', 0)).toThrow();
+  });
+});
+
+describe('displayAmount', () => {
+  const rate = 1_100_000;
+  it('keeps the original amount and currency when no display currency is chosen', () => {
+    expect(displayAmount(1100, 'USD', null, rate)).toEqual({ cents: 1100, currency: 'USD' });
+  });
+  it('converts to the chosen display currency', () => {
+    expect(displayAmount(1100, 'USD', 'EUR', rate)).toEqual({ cents: 1000, currency: 'EUR' });
+    expect(displayAmount(1000, 'EUR', 'USD', rate)).toEqual({ cents: 1100, currency: 'USD' });
+  });
+  it('does not touch amounts already in the display currency', () => {
+    expect(displayAmount(1234, 'EUR', 'EUR', rate)).toEqual({ cents: 1234, currency: 'EUR' });
   });
 });
 

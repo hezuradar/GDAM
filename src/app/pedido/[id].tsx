@@ -4,7 +4,8 @@ import { Linking, StyleSheet, Text, View } from 'react-native';
 import { shareText } from '@/lib/share';
 import { LinesList, PaymentsList, TotalsCard } from '@/components/orders/OrderSections';
 import { announce, confirmDestructive, showError } from '@/components/ui/alerts';
-import { Avatar, StatusStepper } from '@/components/ui/Visuals';
+import { Avatar, DisplayCurrencySwitch, StatusStepper } from '@/components/ui/Visuals';
+import { setDisplayCurrency, useDisplayCurrency } from '@/hooks/useDisplayCurrency';
 import { Button, ButtonRow, IconButton } from '@/components/ui/Button';
 import { ChipGroup } from '@/components/ui/ChipGroup';
 import { Card, EmptyState, ErrorView, FormScroll, InfoRow, LoadingView, PressableRow, SectionHeader } from '@/components/ui/Layout';
@@ -35,6 +36,7 @@ export default function OrderDetailScreen() {
   const id = parseIdParam(useLocalSearchParams<{ id: string }>().id) ?? 0;
   const styles = useThemedStyles(makeStyles);
   const { data, error, loading, reload } = useOrderDetail(id);
+  const displayCurrency = useDisplayCurrency();
 
   if (error) return <ErrorView message={error} onRetry={reload} />;
   if (!data && loading) return <LoadingView />;
@@ -132,7 +134,7 @@ export default function OrderDetailScreen() {
       </Card>
 
       <SectionHeader title={`Productos (${lines.length})`} icon="cube-outline" action={<IconButton icon="add-circle-outline" label="Añadir línea" onPress={() => go('/pedido/linea')} />} />
-      {lines.length > 0 ? <LinesList lines={lines} currency={order.currency} onPressLine={(lineId) => go('/pedido/linea', { id: lineId })} /> : null}
+      {lines.length > 0 ? <LinesList lines={lines} currency={order.currency} rateMicros={totals.rateMicros} onPressLine={(lineId) => go('/pedido/linea', { id: lineId })} /> : null}
       <Button
         variant={lines.length === 0 ? 'primary' : 'secondary'}
         icon="clipboard-outline"
@@ -141,6 +143,7 @@ export default function OrderDetailScreen() {
       />
 
       <SectionHeader title="Importes" icon="calculator-outline" />
+      <DisplayCurrencySwitch value={displayCurrency} onChange={setDisplayCurrency} />
       <TotalsCard totals={totals} payment={payment} currency={order.currency} usesOrderRate={order.fxRateMicros !== null} />
 
       <SectionHeader title={`Pagos (${payments.length})`} icon="cash-outline" action={<IconButton icon="add-circle-outline" label="Registrar pago" onPress={() => go('/pedido/pago')} />} />

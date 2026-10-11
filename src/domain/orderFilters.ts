@@ -12,6 +12,8 @@ export interface OrderListItem {
   readonly pendingCents: number;
   readonly pendingPriceCount: number;
   readonly lineCount: number;
+  /** EUR→USD rate this order uses (its own snapshot or the market rate), for display conversion. */
+  readonly rateMicros: number;
   readonly trackingNumber: string;
   /** Concatenated product text (piece types, measurements, notes, carrier). */
   readonly searchText: string;

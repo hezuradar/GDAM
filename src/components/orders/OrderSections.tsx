@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { formatDate, formatQuantity } from '@/domain/exportText';
-import { formatMoney, formatRate } from '@/domain/money';
+import { displayAmount, formatMoney, formatRate } from '@/domain/money';
+import { useDisplayCurrency } from '@/hooks/useDisplayCurrency';
 import type { PaymentSummary } from '@/domain/payments';
 import { lineTotalCents, type OrderTotals } from '@/domain/totals';
 import type { Currency, OrderLine, Payment } from '@/domain/types';
@@ -14,8 +15,14 @@ type TotalsCardProps = { totals: OrderTotals; payment: PaymentSummary; currency:
 
 export function TotalsCard({ totals, payment, currency, usesOrderRate }: TotalsCardProps) {
   const styles = useThemedStyles(makeStyles);
-  const money = (cents: number) => formatMoney(cents, currency);
-  const rateSource = usesOrderRate ? 'fijado en el pedido' : 'de ajustes';
+  const display = useDisplayCurrency();
+  const shown = (cents: number) => displayAmount(cents, currency, display, totals.rateMicros);
+  const money = (cents: number) => {
+    const amount = shown(cents);
+    return formatMoney(amount.cents, amount.currency);
+  };
+  const isConverted = display !== null && display !== currency;
+  const rateSource = usesOrderRate ? 'fijado en el pedido' : 'de mercado';
   return (
     <Card>
       <InfoRow icon="cube-outline" label="Mercancía" value={money(totals.goodsCents)} />
@@ -29,7 +36,12 @@ export function TotalsCard({ totals, payment, currency, usesOrderRate }: TotalsC
         isStrong
       />
       {totals.totalCents > 0 ? (
-        <PaymentMeter paidCents={payment.paidCents} totalCents={totals.totalCents} currency={currency} status={payment.status} />
+        <PaymentMeter
+          paidCents={shown(payment.paidCents).cents}
+          totalCents={shown(totals.totalCents).cents}
+          currency={shown(0).currency}
+          status={payment.status}
+        />
       ) : (
         <PaymentBadge status={payment.status} />
       )}
@@ -42,16 +54,27 @@ export function TotalsCard({ totals, payment, currency, usesOrderRate }: TotalsC
         </View>
       ) : null}
       <Text style={styles.note}>
-        Cambio usado: 1 € = {formatRate(totals.rateMicros)} US$ ({rateSource})
+        {isConverted ? `Importes convertidos de ${currency} a ${display}. ` : ''}Cambio usado: 1 € ={' '}
+        {formatRate(totals.rateMicros)} US$ ({rateSource})
       </Text>
     </Card>
   );
 }
 
-type LinesListProps = { lines: readonly OrderLine[]; currency: Currency; onPressLine: (id: number) => void };
+type LinesListProps = {
+  lines: readonly OrderLine[];
+  currency: Currency;
+  rateMicros: number;
+  onPressLine: (id: number) => void;
+};
 
-export function LinesList({ lines, currency, onPressLine }: LinesListProps) {
+export function LinesList({ lines, currency, rateMicros, onPressLine }: LinesListProps) {
   const styles = useThemedStyles(makeStyles);
+  const display = useDisplayCurrency();
+  const money = (cents: number) => {
+    const amount = displayAmount(cents, currency, display, rateMicros);
+    return formatMoney(amount.cents, amount.currency);
+  };
   return (
     <Card>
       {lines.map((line, index) => {
@@ -60,7 +83,7 @@ export function LinesList({ lines, currency, onPressLine }: LinesListProps) {
         const priceText =
           line.unitPriceCents === null || total === null
             ? 'Precio pendiente'
-            : `${formatMoney(line.unitPriceCents, currency)}/ud · ${formatMoney(total, currency)}`;
+            : `${money(line.unitPriceCents)}/ud · ${money(total)}`;
         return (
           <View key={line.id} style={index > 0 ? styles.separated : undefined}>
             <PressableRow

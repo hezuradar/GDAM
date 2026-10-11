@@ -74,6 +74,20 @@ export function convert(cents: number, from: Currency, to: Currency, rateMicros:
     : Math.round((cents * MICROS) / rateMicros);
 }
 
+/**
+ * Amount to show when the user picks a display currency (null = keep the original).
+ * Display only: stored amounts never change.
+ */
+export function displayAmount(
+  cents: number,
+  from: Currency,
+  display: Currency | null,
+  rateMicros: number,
+): { cents: number; currency: Currency } {
+  if (display === null || display === from) return { cents, currency: from };
+  return { cents: convert(cents, from, display, rateMicros), currency: display };
+}
+
 /** Parses "1,08" → 1080000 micros. Null when invalid or not positive. */
 export function parseRate(input: string): number | null {
   const value = parseDecimal(input.trim());

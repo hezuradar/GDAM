@@ -1,7 +1,8 @@
 import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { formatDate, plural } from '@/domain/exportText';
-import { formatMoney } from '@/domain/money';
+import { displayAmount, formatMoney } from '@/domain/money';
+import { useDisplayCurrency } from '@/hooks/useDisplayCurrency';
 import type { OrderListItem } from '@/domain/orderFilters';
 import { ORDER_STATUS_LABEL, PAYMENT_STATUS_LABEL } from '@/i18n/es';
 import { radius, spacing, typography, useThemedStyles, type Theme } from '@/theme/theme';
@@ -26,7 +27,9 @@ function describe(item: OrderListItem): string {
 
 function OrderCardBase({ item, onPress }: OrderCardProps) {
   const styles = useThemedStyles(makeStyles);
-  const paidCents = item.totalCents - item.pendingCents;
+  const display = useDisplayCurrency();
+  const total = displayAmount(item.totalCents, item.currency, display, item.rateMicros);
+  const paid = displayAmount(item.totalCents - item.pendingCents, item.currency, display, item.rateMicros);
   return (
     <Pressable
       onPress={() => onPress(item.id)}
@@ -47,7 +50,7 @@ function OrderCardBase({ item, onPress }: OrderCardProps) {
             <IconText icon="cube-outline">{plural(item.lineCount, 'línea', 'líneas')}</IconText>
           </View>
         </View>
-        <Text style={styles.total}>{formatMoney(item.totalCents, item.currency)}</Text>
+        <Text style={styles.total}>{formatMoney(total.cents, total.currency)}</Text>
       </View>
 
       <View style={styles.badges}>
@@ -56,7 +59,7 @@ function OrderCardBase({ item, onPress }: OrderCardProps) {
       </View>
 
       {item.totalCents > 0 ? (
-        <PaymentMeter paidCents={paidCents} totalCents={item.totalCents} currency={item.currency} status={item.paymentStatus} />
+        <PaymentMeter paidCents={paid.cents} totalCents={total.cents} currency={total.currency} status={item.paymentStatus} />
       ) : null}
 
       {item.trackingNumber ? <IconText icon="airplane-outline">{item.trackingNumber}</IconText> : null}

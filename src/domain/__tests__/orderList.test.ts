@@ -40,6 +40,7 @@ describe('buildOrderListItems', () => {
       paymentStatus: 'parcial',
       pendingPriceCount: 1,
       lineCount: 2,
+      rateMicros: 1_080_000,
     });
     expect(items[0].searchText).toContain('brida DN50');
     expect(items[0].searchText).toContain('urgente');

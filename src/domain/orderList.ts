@@ -47,6 +47,7 @@ export function buildOrderListItems(source: OrderListSource): OrderListItem[] {
       pendingCents: summary.pendingCents,
       pendingPriceCount: totals.pendingPriceCount,
       lineCount: lines.length,
+      rateMicros: totals.rateMicros,
       trackingNumber: order.trackingNumber,
       searchText: `${productText} ${order.carrier} ${order.notes}`,
     };

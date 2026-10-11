@@ -4,34 +4,44 @@ import { useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { FilterSheet } from '@/components/orders/FilterSheet';
 import { IconButton } from '@/components/ui/Button';
-import { StatTile } from '@/components/ui/Visuals';
+import { DisplayCurrencySwitch, StatTile } from '@/components/ui/Visuals';
 import { plural } from '@/domain/exportText';
 import { OrderCard } from '@/components/orders/OrderCard';
 import { CONTENT_MAX_WIDTH, EmptyState, ErrorView, LoadingView } from '@/components/ui/Layout';
-import { formatMoney } from '@/domain/money';
+import { displayAmount, formatMoney } from '@/domain/money';
+import { setDisplayCurrency, useDisplayCurrency, type DisplayCurrency } from '@/hooks/useDisplayCurrency';
 import { countActiveFilters, filterOrders, type OrderFilterCriteria, type OrderListItem } from '@/domain/orderFilters';
 import { CURRENCIES } from '@/domain/types';
 import { useLoader } from '@/hooks/useLoader';
 import { loadOrderList } from '@/hooks/useOrderList';
 import { MIN_TOUCH, radius, spacing, typography, useTheme, useThemedStyles, type Theme } from '@/theme/theme';
 
-function pendingSummary(items: readonly OrderListItem[]): string {
+/**
+ * Pending amount: one figure converted to the display currency (each order at its own rate),
+ * or one figure per original currency ("X € + Y US$"). Null when nothing is pending.
+ */
+function pendingText(items: readonly OrderListItem[], display: DisplayCurrency): string | null {
+  if (display) {
+    const cents = items.reduce((sum, i) => sum + displayAmount(i.pendingCents, i.currency, display, i.rateMicros).cents, 0);
+    return cents > 0 ? formatMoney(cents, display) : null;
+  }
   const parts = CURRENCIES.map((currency) => {
     const cents = items.filter((i) => i.currency === currency).reduce((sum, i) => sum + i.pendingCents, 0);
     return cents > 0 ? formatMoney(cents, currency) : null;
   }).filter(Boolean);
+  return parts.length > 0 ? parts.join(' + ') : null;
+}
+
+function pendingSummary(items: readonly OrderListItem[], display: DisplayCurrency): string {
   if (items.length === 0) return 'ninguno coincide';
-  return parts.length > 0 ? `Pendiente de pago: ${parts.join(' + ')}` : 'Todo pagado';
+  const pending = pendingText(items, display);
+  return pending ? `Pendiente de pago: ${pending}` : 'Todo pagado';
 }
 
 /** Headline figures over all orders (not only the filtered ones). */
-function orderStats(items: readonly OrderListItem[]) {
-  const pendingParts = CURRENCIES.map((currency) => {
-    const cents = items.filter((i) => i.currency === currency).reduce((sum, i) => sum + i.pendingCents, 0);
-    return cents > 0 ? formatMoney(cents, currency) : null;
-  }).filter(Boolean);
+function orderStats(items: readonly OrderListItem[], display: DisplayCurrency) {
   return {
-    pendingText: pendingParts.length > 0 ? pendingParts.join(' + ') : '0',
+    pendingText: pendingText(items, display) ?? '0',
     unpaidCount: items.filter((i) => i.pendingCents > 0).length,
     shippedCount: items.filter((i) => i.status === 'enviado').length,
     missingPriceCount: items.filter((i) => i.pendingPriceCount > 0).length,
@@ -47,7 +57,8 @@ export default function OrdersScreen() {
 
   const visible = useMemo(() => filterOrders(data?.items ?? [], criteria), [data, criteria]);
   const activeFilters = countActiveFilters(criteria);
-  const stats = useMemo(() => orderStats(data?.items ?? []), [data]);
+  const display = useDisplayCurrency();
+  const stats = useMemo(() => orderStats(data?.items ?? [], display), [data, display]);
   const isUnpaidFilter = (criteria.paymentStatuses ?? []).length === 2 && !(criteria.paymentStatuses ?? []).includes('pagado');
   const isShippedFilter = (criteria.statuses ?? []).length === 1 && criteria.statuses?.[0] === 'enviado';
   const toggle = (patch: Partial<OrderFilterCriteria>) => setCriteria((c) => ({ ...c, ...patch }));
@@ -110,6 +121,7 @@ export default function OrdersScreen() {
           {activeFilters > 0 ? <Text style={styles.filterCount}>{activeFilters}</Text> : null}
         </Pressable>
       </View>
+      <DisplayCurrencySwitch value={display} onChange={setDisplayCurrency} />
       <View style={styles.tiles}>
         <StatTile
           icon="wallet-outline"
@@ -137,7 +149,7 @@ export default function OrdersScreen() {
         />
       </View>
       <Text style={styles.summary} accessibilityLiveRegion="polite">
-        {visible.length} {visible.length === 1 ? 'pedido' : 'pedidos'} · {pendingSummary(visible)}
+        {visible.length} {visible.length === 1 ? 'pedido' : 'pedidos'} · {pendingSummary(visible, display)}
       </Text>
     </View>
   );
