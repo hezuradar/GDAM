@@ -26,6 +26,7 @@ export default function RootLayout() {
         <Stack.Screen name="pedido/linea" options={{ presentation: 'modal', title: 'Línea' }} />
         <Stack.Screen name="pedido/pago" options={{ presentation: 'modal', title: 'Pago' }} />
         <Stack.Screen name="proveedor/editar" options={{ presentation: 'modal', title: 'Proveedor' }} />
+        <Stack.Screen name="producto/[id]" options={{ presentation: 'modal', title: 'Precio de venta' }} />
       </Stack>
       </AuthGate>
     </ThemeProvider>

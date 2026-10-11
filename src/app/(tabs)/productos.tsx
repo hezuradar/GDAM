@@ -1,0 +1,127 @@
+import { router } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { listProducts } from '@/api/data';
+import { ChipGroup } from '@/components/ui/ChipGroup';
+import { CONTENT_MAX_WIDTH, EmptyState, ErrorView, InfoRow, LoadingView } from '@/components/ui/Layout';
+import { TextField } from '@/components/ui/TextField';
+import { IconText } from '@/components/ui/Visuals';
+import { formatDate, formatQuantity } from '@/domain/exportText';
+import { computeProductCosts, formatMargin, productSaleInfo, type ProductCost } from '@/domain/landedCost';
+import { convert, formatMoney } from '@/domain/money';
+import { foldText } from '@/domain/orderFilters';
+import { CURRENCIES, type Currency } from '@/domain/types';
+import { useLoader } from '@/hooks/useLoader';
+import { radius, spacing, typography, useThemedStyles, type Theme } from '@/theme/theme';
+
+async function loadProducts(): Promise<ProductCost[]> {
+  const { products, settings } = await listProducts();
+  return computeProductCosts(products, settings.fxRateMicros);
+}
+
+function ProductCard({ product, currency, onPress }: { product: ProductCost; currency: Currency; onPress: () => void }) {
+  const styles = useThemedStyles(makeStyles);
+  const info = productSaleInfo(product, currency);
+  const money = (cents: number, from: Currency = product.currency) => formatMoney(convert(cents, from, currency, product.rateMicros), currency);
+  const title = [formatQuantity(product.quantity), '×', product.pieceType, product.measurements].filter(Boolean).join(' ');
+  const profit = info.salePriceCents !== null && info.landedUnitCents !== null ? info.salePriceCents - info.landedUnitCents : null;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}. Coste unitario ${info.landedUnitCents === null ? 'pendiente' : formatMoney(info.landedUnitCents, currency)}${
+        info.salePriceCents !== null ? `. Venta ${formatMoney(info.salePriceCents, currency)}` : ''
+      }`}
+      accessibilityHint="Poner precio de venta o porcentaje de beneficio"
+      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+    >
+      <Text style={styles.title}>{title}</Text>
+      <View style={styles.metaRow}>
+        <IconText icon="business-outline">{product.supplierName || 'Sin proveedor'}</IconText>
+        <IconText icon="receipt-outline">
+          #{product.orderId} · {formatDate(product.orderDate)}
+        </IconText>
+      </View>
+      {product.unitPriceCents === null || info.landedUnitCents === null ? (
+        <IconText icon="pricetag-outline">Precio pendiente: añádelo en el pedido para calcular el coste</IconText>
+      ) : (
+        <>
+          <InfoRow icon="pricetag-outline" label="Precio por unidad" value={money(product.unitPriceCents)} />
+          <InfoRow icon="airplane-outline" label="Envío + aduanas por unidad" value={`+ ${money(product.allocatedPerUnitCents ?? 0)}`} />
+          <InfoRow icon="calculator-outline" label="Coste unitario total" value={formatMoney(info.landedUnitCents, currency)} isStrong />
+          <View style={styles.divider} />
+          {info.salePriceCents === null ? (
+            <IconText icon="add-circle-outline">Toca para poner precio de venta o % de beneficio</IconText>
+          ) : (
+            <>
+              <InfoRow icon="cart-outline" label="Precio de venta" value={formatMoney(info.salePriceCents, currency)} isStrong />
+              <InfoRow
+                icon="trending-up-outline"
+                label={`Beneficio${info.marginBp !== null ? ` (${formatMargin(info.marginBp)})` : ''}`}
+                value={profit === null ? '—' : `${formatMoney(profit, currency)} / ud`}
+              />
+            </>
+          )}
+        </>
+      )}
+    </Pressable>
+  );
+}
+
+export default function ProductsScreen() {
+  const styles = useThemedStyles(makeStyles);
+  const { data, error, loading, reload } = useLoader(loadProducts);
+  const [currency, setCurrency] = useState<Currency>('EUR');
+  const [query, setQuery] = useState('');
+  const visible = useMemo(() => {
+    const folded = foldText(query.trim());
+    return (data ?? []).filter((p) => foldText(`${p.pieceType} ${p.measurements} ${p.supplierName} ${p.orderId}`).includes(folded));
+  }, [data, query]);
+  const open = useCallback((lineId: number) => router.push({ pathname: '/producto/[id]', params: { id: lineId } }), []);
+
+  if (error) return <ErrorView message={error} onRetry={reload} />;
+  if (!data && loading) return <LoadingView />;
+  if (!data) return null;
+  if (data.length === 0) {
+    return <EmptyState icon="cube-outline" title="Aún no hay productos" message="Los productos aparecen al añadir líneas a tus pedidos." />;
+  }
+
+  return (
+    <FlatList
+      style={styles.screen}
+      contentContainerStyle={styles.list}
+      data={visible}
+      keyExtractor={(p) => String(p.lineId)}
+      ItemSeparatorComponent={() => <View style={styles.separator} />}
+      ListHeaderComponent={
+        <View style={styles.header}>
+          <ChipGroup<Currency>
+            label="Ver importes en"
+            value={currency}
+            options={CURRENCIES.map((c) => ({ value: c, label: c === 'EUR' ? 'Euros (€)' : 'Dólares (US$)' }))}
+            onChange={setCurrency}
+          />
+          <TextField label="Buscar producto" value={query} onChangeText={setQuery} autoCorrect={false} inputMode="search" />
+          <Text style={styles.note}>
+            Envío y aduanas de cada pedido se reparten entre sus productos en proporción al importe de cada línea.
+          </Text>
+        </View>
+      }
+      renderItem={({ item }) => <ProductCard product={item} currency={currency} onPress={() => open(item.lineId)} />}
+    />
+  );
+}
+
+const makeStyles = (theme: Theme) =>
+  StyleSheet.create({
+    screen: { flex: 1, backgroundColor: theme.colors.background },
+    list: { padding: spacing.lg, paddingBottom: spacing.xxl, width: '100%', maxWidth: CONTENT_MAX_WIDTH, alignSelf: 'center' },
+    header: { gap: spacing.md, marginBottom: spacing.md },
+    note: { ...typography.footnote, color: theme.colors.textSecondary },
+    separator: { height: spacing.md },
+    card: { backgroundColor: theme.colors.surface, borderRadius: radius.lg, padding: spacing.lg, gap: spacing.sm },
+    pressed: { opacity: 0.7 },
+    title: { ...typography.headline, color: theme.colors.text },
+    metaRow: { flexDirection: 'row', flexWrap: 'wrap', columnGap: spacing.md, rowGap: spacing.xs },
+    divider: { height: StyleSheet.hairlineWidth, backgroundColor: theme.colors.divider },
+  });

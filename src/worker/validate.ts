@@ -132,6 +132,22 @@ export function parseImportInput(raw: unknown): ImportInput {
   return { lines: body.lines.map(parseLineInput), replaceExisting: body.replaceExisting };
 }
 
+export interface LinePricingInput {
+  readonly salePriceCents: number | null;
+  readonly saleCurrency: Currency | null;
+  readonly marginBp: number | null;
+}
+
+/** Either a sale price (with its currency) or a margin over cost; both null clears the pricing. */
+export function parseLinePricingInput(raw: unknown): LinePricingInput {
+  const body = asObject(raw);
+  const salePriceCents = nullableInteger(body, 'salePriceCents', 0, MAX_CENTS);
+  const saleCurrency = body.saleCurrency === null || body.saleCurrency === undefined ? null : oneOf<Currency>(body, 'saleCurrency', CURRENCIES);
+  const marginBp = nullableInteger(body, 'marginBp', -10_000, 10_000_000);
+  if (salePriceCents !== null && saleCurrency === null) throw badRequest('«saleCurrency» es obligatorio con un precio de venta');
+  return { salePriceCents, saleCurrency: salePriceCents === null ? null : saleCurrency, marginBp };
+}
+
 export function parsePaymentInput(raw: unknown): PaymentInput {
   const body = asObject(raw);
   return {

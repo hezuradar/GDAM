@@ -1,3 +1,4 @@
+import type { ProductSource } from '@/domain/landedCost';
 import type { ListLine, ListPayment } from '@/domain/orderList';
 import type { Currency, Order, OrderLine, OrderStatus, Payment, Supplier } from '@/domain/types';
 import { apiRequest, getOrNull } from './client';
@@ -84,6 +85,13 @@ export const deleteLine = (id: number) => apiRequest('DELETE', `/lines/${id}`);
 /** Adds (or replaces) lines atomically on the server. */
 export const importLines = (orderId: number, lines: readonly LineInput[], replaceExisting: boolean) =>
   apiRequest<{ count: number }>('POST', `/orders/${orderId}/lines/import`, { lines, replaceExisting });
+
+// Products (landed cost and sale pricing)
+export const listProducts = () => apiRequest<{ products: ProductSource[]; settings: AppSettings }>('GET', '/products');
+export const saveLinePricing = (
+  lineId: number,
+  pricing: { salePriceCents: number | null; saleCurrency: Currency | null; marginBp: number | null },
+) => apiRequest('PATCH', `/lines/${lineId}/pricing`, pricing);
 
 // Payments
 export const getPayment = (id: number) => getOrNull<Payment>(`/payments/${id}`);

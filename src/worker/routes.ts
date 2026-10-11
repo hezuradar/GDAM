@@ -5,6 +5,7 @@ import {
   parseId,
   parseImportInput,
   parseLineInput,
+  parseLinePricingInput,
   parseOrderInput,
   parsePaymentInput,
   parseSettingsInput,
@@ -75,6 +76,14 @@ const routes: readonly Route[] = [
   ['GET', path('/lines/:id'), async ({ db, params }) => json(await orThrow(repo.getLine(db, parseId(params[0])), 'Línea'))],
   ['PUT', path('/lines/:id'), async ({ db, params, request }) => {
     await repo.updateLine(db, parseId(params[0]), parseLineInput(await readJson(request)));
+    return json({ ok: true });
+  }],
+  ['GET', path('/products'), async ({ db }) => {
+    const [products, settings] = await Promise.all([repo.listProducts(db), repo.getSettings(db)]);
+    return json({ products, settings });
+  }],
+  ['PATCH', path('/lines/:id/pricing'), async ({ db, params, request }) => {
+    await repo.updateLinePricing(db, parseId(params[0]), parseLinePricingInput(await readJson(request)));
     return json({ ok: true });
   }],
   ['DELETE', path('/lines/:id'), async ({ db, params }) => {
