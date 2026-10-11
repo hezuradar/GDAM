@@ -8,21 +8,22 @@ import { TextField } from '@/components/ui/TextField';
 import { IconText } from '@/components/ui/Visuals';
 import { formatDate, formatQuantity } from '@/domain/exportText';
 import { computeProductCosts, formatMargin, productSaleInfo, type ProductCost } from '@/domain/landedCost';
-import { convert, formatMoney } from '@/domain/money';
+import { convert, formatMoney, marketRates } from '@/domain/money';
 import { foldText } from '@/domain/orderFilters';
 import { CURRENCIES, type Currency } from '@/domain/types';
+import { CURRENCY_LABEL } from '@/i18n/es';
 import { useLoader } from '@/hooks/useLoader';
 import { radius, spacing, typography, useThemedStyles, type Theme } from '@/theme/theme';
 
 async function loadProducts(): Promise<ProductCost[]> {
   const { products, settings } = await listProducts();
-  return computeProductCosts(products, settings.fxRateMicros);
+  return computeProductCosts(products, marketRates(settings));
 }
 
 function ProductCard({ product, currency, onPress }: { product: ProductCost; currency: Currency; onPress: () => void }) {
   const styles = useThemedStyles(makeStyles);
   const info = productSaleInfo(product, currency);
-  const money = (cents: number, from: Currency = product.currency) => formatMoney(convert(cents, from, currency, product.rateMicros), currency);
+  const money = (cents: number, from: Currency = product.currency) => formatMoney(convert(cents, from, currency, product.rates), currency);
   const title = [formatQuantity(product.quantity), '×', product.pieceType, product.measurements].filter(Boolean).join(' ');
   const profit = info.salePriceCents !== null && info.landedUnitCents !== null ? info.salePriceCents - info.landedUnitCents : null;
   return (
@@ -108,7 +109,7 @@ export default function ProductsScreen() {
           <ChipGroup<Currency>
             label="Ver importes en"
             value={currency}
-            options={CURRENCIES.map((c) => ({ value: c, label: c === 'EUR' ? 'Euros (€)' : 'Dólares (US$)' }))}
+            options={CURRENCIES.map((c) => ({ value: c, label: CURRENCY_LABEL[c] }))}
             onChange={setCurrency}
           />
           <TextField label="Buscar producto" value={query} onChangeText={setQuery} autoCorrect={false} inputMode="search" />

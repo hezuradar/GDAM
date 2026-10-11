@@ -21,7 +21,7 @@ describe('orderSummaryText', () => {
         { quantity: 10, pieceType: 'tornillo', measurements: 'M8x40', unitPriceCents: 25 },
         { quantity: 2, pieceType: 'brida', measurements: 'DN50', unitPriceCents: null },
       ],
-      totals: { goodsCents: 250, shippingCents: 1000, customsCents: 0, totalCents: 1250, pendingPriceCount: 1, rateMicros: 1_080_000 },
+      totals: { goodsCents: 250, shippingCents: 1000, customsCents: 0, totalCents: 1250, pendingPriceCount: 1, rates: { usdMicros: 1_080_000, inrMicros: 100_000_000 } },
       paidCents: 500,
       pendingCents: 750,
     });

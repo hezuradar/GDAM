@@ -1,3 +1,4 @@
+import { marketRates } from '@/domain/money';
 import { useCallback } from 'react';
 import { getOrderDetailRaw } from '@/api/data';
 import { paidCents, paymentSummary, type PaymentSummary } from '@/domain/payments';
@@ -17,8 +18,8 @@ export interface OrderDetail {
 export async function loadOrderDetail(orderId: number): Promise<OrderDetail | null> {
   const raw = await getOrderDetailRaw(orderId);
   if (!raw) return null;
-  const totals = orderTotals(raw.order, raw.lines, raw.settings.fxRateMicros);
-  const paid = paidCents(raw.payments, raw.order.currency, totals.rateMicros);
+  const totals = orderTotals(raw.order, raw.lines, marketRates(raw.settings));
+  const paid = paidCents(raw.payments, raw.order.currency, totals.rates);
   return { ...raw, totals, payment: paymentSummary(totals.totalCents, paid) };
 }
 

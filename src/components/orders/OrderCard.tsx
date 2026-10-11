@@ -28,8 +28,8 @@ function describe(item: OrderListItem): string {
 function OrderCardBase({ item, onPress }: OrderCardProps) {
   const styles = useThemedStyles(makeStyles);
   const display = useDisplayCurrency();
-  const total = displayAmount(item.totalCents, item.currency, display, item.rateMicros);
-  const paid = displayAmount(item.totalCents - item.pendingCents, item.currency, display, item.rateMicros);
+  const total = displayAmount(item.totalCents, item.currency, display, item.rates);
+  const paid = displayAmount(item.totalCents - item.pendingCents, item.currency, display, item.rates);
   return (
     <Pressable
       onPress={() => onPress(item.id)}

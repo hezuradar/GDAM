@@ -19,10 +19,11 @@ describe('parseOpenErApi', () => {
       result: 'success',
       base_code: 'EUR',
       time_last_update_unix: 1791590551,
-      rates: { USD: 1.120597, EUR: 1 },
+      rates: { USD: 1.120597, EUR: 1, INR: 97.5 },
     });
     expect(quote).toEqual({
       rateMicros: 1_120_597,
+      inrMicros: 97_500_000,
       asOf: new Date(1791590551 * 1000).toISOString(),
       source: 'open.er-api.com',
     });
@@ -46,8 +47,9 @@ describe('parseOpenErApi', () => {
 
 describe('parseCurrencyApi', () => {
   it('reads eur.usd and the date', () => {
-    expect(parseCurrencyApi({ date: '2026-10-10', eur: { usd: 1.1201766 } })).toEqual({
+    expect(parseCurrencyApi({ date: '2026-10-10', eur: { usd: 1.1201766, inr: 97.51234 } })).toEqual({
       rateMicros: 1_120_177,
+      inrMicros: 97_512_340,
       asOf: '2026-10-10',
       source: 'currency-api',
     });
@@ -76,5 +78,12 @@ describe('isFxStale', () => {
 
   it('treats an invalid timestamp as stale', () => {
     expect(isFxStale('ayer', now)).toBe(true);
+  });
+});
+
+describe('rupee quotes', () => {
+  it('drops an implausible INR value but keeps the dollar rate', () => {
+    const quote = parseCurrencyApi({ date: '2026-10-10', eur: { usd: 1.12, inr: 5 } });
+    expect(quote).toMatchObject({ rateMicros: 1_120_000, inrMicros: null });
   });
 });

@@ -2,7 +2,7 @@ import { lineTotalCents, orderTotals } from '../totals';
 import { paidCents, paymentSummary } from '../payments';
 import type { Order, Payment } from '../types';
 
-const RATE = 1_100_000; // 1 EUR = 1.10 USD
+const RATE = { usdMicros: 1_100_000, inrMicros: 100_000_000 }; // 1 EUR = 1.10 USD = 100 INR
 
 const baseOrder: Pick<
   Order,
@@ -42,7 +42,7 @@ describe('orderTotals', () => {
       customsCents: 500,
       totalCents: 3000,
       pendingPriceCount: 0,
-      rateMicros: RATE,
+      rates: RATE,
     });
   });
 
@@ -62,7 +62,7 @@ describe('orderTotals', () => {
       RATE,
     );
     expect(totals.customsCents).toBe(700);
-    expect(totals.rateMicros).toBe(1_000_000);
+    expect(totals.rates.usdMicros).toBe(1_000_000);
   });
 });
 
@@ -74,7 +74,7 @@ describe('payments', () => {
   });
 
   it('converts each payment with its own rate when present', () => {
-    expect(paidCents([payment(1000, 'EUR'), payment(2200, 'USD', 1_100_000)], 'EUR', 2_000_000)).toBe(3000);
+    expect(paidCents([payment(1000, 'EUR'), payment(2200, 'USD', 1_100_000)], 'EUR', { ...RATE, usdMicros: 2_000_000 })).toBe(3000);
   });
 
   it('uses the fallback rate when the payment has none', () => {

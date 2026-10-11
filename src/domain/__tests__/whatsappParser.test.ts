@@ -51,7 +51,7 @@ describe('parseWhatsAppMessage', () => {
 });
 
 describe('toImportableLine', () => {
-  const RATE = 1_100_000;
+  const RATE = { usdMicros: 1_100_000, inrMicros: 100_000_000 };
 
   it('keeps prices already in the order currency', () => {
     const [parsed] = parseWhatsAppText('10 tornillo M8x40 0,25€');
@@ -182,5 +182,61 @@ describe('parseWhatsAppText', () => {
     const lines = parseWhatsAppText(text);
     expect(lines).toHaveLength(500);
     expect(Date.now() - start).toBeLessThan(500);
+  });
+});
+
+describe('measurements as "n x n x n" and pieces', () => {
+  it('reads measurements first, then description and "N pieces"', () => {
+    const [line] = parseWhatsAppText('80 x 13 x 2 mm - Mother of pearl 20 pieces');
+    expect(line).toMatchObject({ quantity: 20, pieceType: 'Mother of pearl', measurements: '80 x 13 x 2 mm', issues: [] });
+  });
+
+  it('reads the quantity first, then description and compact measurements', () => {
+    const [line] = parseWhatsAppText('10 bufalo amber 60x10x15');
+    expect(line).toMatchObject({ quantity: 10, pieceType: 'bufalo amber', measurements: '60x10x15', issues: [] });
+  });
+
+  it('accepts "N pieces" at the start and measurements at the end', () => {
+    const [line] = parseWhatsAppText('20 pieces Mother of pearl 80x13x2mm');
+    expect(line).toMatchObject({ quantity: 20, pieceType: 'Mother of pearl', measurements: '80x13x2mm' });
+  });
+
+  it('keeps a price after the pieces', () => {
+    const [line] = parseWhatsAppText('80 x 13 x 2 mm - Mother of pearl 20 pieces $1.50');
+    expect(line).toMatchObject({ quantity: 20, pieceType: 'Mother of pearl', unitPriceCents: 150, priceCurrency: 'USD' });
+  });
+
+  it('does not take a size like M8 x 50 as measurements', () => {
+    const [line] = parseWhatsAppText('Tornillo M8 x 50 uds');
+    expect(line).toMatchObject({ quantity: 50, pieceType: 'Tornillo', measurements: 'M8' });
+  });
+});
+
+describe('rupee prices', () => {
+  it.each([
+    ['10 bufalo amber 60x10x15 ₹250', 25_000],
+    ['10 bufalo amber 60x10x15 Rs 250', 25_000],
+    ['10 bufalo amber 60x10x15 250 INR', 25_000],
+    ['10 bufalo amber 60x10x15 250 rupees each', 25_000],
+  ])('reads "%s" as a rupee price', (text, cents) => {
+    const [line] = parseWhatsAppText(text);
+    expect(line).toMatchObject({ quantity: 10, pieceType: 'bufalo amber', unitPriceCents: cents, priceCurrency: 'INR' });
+  });
+
+  it('detects shipping in rupees', () => {
+    expect(parseWhatsAppMessage('Shipping: Rs 1500').shipping).toMatchObject({ cents: 150_000, currency: 'INR' });
+  });
+
+  it('converts a rupee price to the order currency', () => {
+    const [parsed] = parseWhatsAppText('10 bufalo amber 60x10x15 ₹250');
+    expect(toImportableLine(parsed, 'EUR', { usdMicros: 1_100_000, inrMicros: 100_000_000 }).unitPriceCents).toBe(250);
+  });
+});
+
+describe('"N x M units" is a quantity, not measurements', () => {
+  it.each(['3 x 10 uds tornillos', '2 x 50 pcs bolts'])('keeps the leading quantity in "%s"', (text) => {
+    const [line] = parseWhatsAppText(text);
+    expect(line.issues).not.toContain('Sin cantidad');
+    expect(line.measurements).not.toMatch(/^\d+ x \d+$/);
   });
 });

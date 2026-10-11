@@ -1,4 +1,4 @@
-import { convert } from './money';
+import { convert, withUsdRate, type FxRates } from './money';
 import type { Currency, Payment, PaymentStatus } from './types';
 
 /** Differences of up to 1 cent (rounding after conversions) count as fully paid. */
@@ -17,10 +17,10 @@ export interface PaymentSummary {
 export function paidCents(
   payments: readonly PaymentMoneyFields[],
   orderCurrency: Currency,
-  fallbackRateMicros: number,
+  orderRates: FxRates,
 ): number {
   return payments.reduce(
-    (sum, p) => sum + convert(p.amountCents, p.currency, orderCurrency, p.fxRateMicros ?? fallbackRateMicros),
+    (sum, p) => sum + convert(p.amountCents, p.currency, orderCurrency, withUsdRate(orderRates, p.fxRateMicros)),
     0,
   );
 }

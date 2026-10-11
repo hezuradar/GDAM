@@ -1,3 +1,4 @@
+import type { FxRates } from './money';
 import type { OrderListItem } from './orderFilters';
 import { paidCents, paymentSummary, type PaymentMoneyFields } from './payments';
 import { orderTotals } from './totals';
@@ -11,7 +12,7 @@ export interface OrderListSource {
   readonly lines: readonly ListLine[];
   readonly payments: readonly ListPayment[];
   readonly supplierNames: ReadonlyMap<number, string>;
-  readonly fallbackRateMicros: number;
+  readonly marketRates: FxRates;
 }
 
 const UNKNOWN_SUPPLIER = 'Proveedor desconocido';
@@ -30,8 +31,8 @@ export function buildOrderListItems(source: OrderListSource): OrderListItem[] {
 
   return source.orders.map((order) => {
     const lines = linesByOrder.get(order.id) ?? [];
-    const totals = orderTotals(order, lines, source.fallbackRateMicros);
-    const paid = paidCents(paymentsByOrder.get(order.id) ?? [], order.currency, totals.rateMicros);
+    const totals = orderTotals(order, lines, source.marketRates);
+    const paid = paidCents(paymentsByOrder.get(order.id) ?? [], order.currency, totals.rates);
     const summary = paymentSummary(totals.totalCents, paid);
     const productText = lines.map((l) => `${l.pieceType} ${l.measurements}`).join(' ');
 
@@ -47,7 +48,7 @@ export function buildOrderListItems(source: OrderListSource): OrderListItem[] {
       pendingCents: summary.pendingCents,
       pendingPriceCount: totals.pendingPriceCount,
       lineCount: lines.length,
-      rateMicros: totals.rateMicros,
+      rates: totals.rates,
       trackingNumber: order.trackingNumber,
       searchText: `${productText} ${order.carrier} ${order.notes}`,
     };

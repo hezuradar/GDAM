@@ -17,15 +17,21 @@ pierden si se borra el navegador. Se puede **instalar en la pantalla de inicio**
   10 tornillo M8x40
   5 x placa 200x300x5 3.50
   12 pcs tubo 25x2 L=1000 @ 4,20€
+  80 x 13 x 2 mm - Mother of pearl 20 pieces
+  10 bufalo amber 60x10x15 Rs 250
   ```
+  Las medidas `número x número x número` (con o sin mm/cm) se reconocen estén donde estén, y la cantidad puede ir al
+  principio o al final («20 pieces», «50 uds»). Precios en €, US$ o rupias (₹, Rs, INR).
   Antes de guardar ves una vista previa. Las líneas dudosas se marcan para revisar y puedes desmarcar las que no quieras.
 - **Precio por pieza** ahora o después: las líneas sin precio aparecen como «precio pendiente» y el total se marca como
   provisional.
-- **Envío y aduanas**, cada uno en su moneda (EUR/USD), convertidos a la moneda del pedido. Si cambias la moneda de un
+- **Monedas**: euro, dólar y rupia india (EUR, USD, INR) en pedidos, pagos, envío, aduanas y precios de venta.
+- **Envío y aduanas**, cada uno en su moneda, convertidos a la moneda del pedido. Si cambias la moneda de un
   pedido, también se convierten los precios de sus líneas.
 - **Cambio euro/dólar de mercado**: el servidor lo descarga cada hora (open.er-api.com y, como respaldo, currency-api). Se
   puede pasar a modo manual en Ajustes, o fijar un cambio propio en un pedido. Las fuentes gratuitas publican la
-  cotización una vez al día; si una fuente devuelve un salto de más del 10 %, se ignora.
+  cotización una vez al día; si una fuente devuelve un salto de más del 10 %, se ignora. El cambio euro/rupia se
+  descarga igual, cada hora, y siempre es el de mercado (el cambio propio de un pedido o pago solo fija el del dólar).
 - **Número de seguimiento y transportista** por pedido, con botones para copiarlo y rastrearlo.
 - **Pagos parciales o totales** en cualquier moneda, cada uno con su propio cambio. El pedido muestra si está *sin pagar*,
   con *pago parcial* o *pagado*, y cuánto falta.

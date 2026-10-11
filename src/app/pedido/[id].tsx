@@ -134,7 +134,7 @@ export default function OrderDetailScreen() {
       </Card>
 
       <SectionHeader title={`Productos (${lines.length})`} icon="cube-outline" action={<IconButton icon="add-circle-outline" label="Añadir línea" onPress={() => go('/pedido/linea')} />} />
-      {lines.length > 0 ? <LinesList lines={lines} currency={order.currency} rateMicros={totals.rateMicros} onPressLine={(lineId) => go('/pedido/linea', { id: lineId })} /> : null}
+      {lines.length > 0 ? <LinesList lines={lines} currency={order.currency} rates={totals.rates} onPressLine={(lineId) => go('/pedido/linea', { id: lineId })} /> : null}
       <Button
         variant={lines.length === 0 ? 'primary' : 'secondary'}
         icon="clipboard-outline"

@@ -22,7 +22,7 @@ import { MIN_TOUCH, radius, spacing, typography, useTheme, useThemedStyles, type
  */
 function pendingText(items: readonly OrderListItem[], display: DisplayCurrency): string | null {
   if (display) {
-    const cents = items.reduce((sum, i) => sum + displayAmount(i.pendingCents, i.currency, display, i.rateMicros).cents, 0);
+    const cents = items.reduce((sum, i) => sum + displayAmount(i.pendingCents, i.currency, display, i.rates).cents, 0);
     return cents > 0 ? formatMoney(cents, display) : null;
   }
   const parts = CURRENCIES.map((currency) => {

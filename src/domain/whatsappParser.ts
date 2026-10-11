@@ -1,4 +1,4 @@
-import { convert, parseAmount, parseDecimal } from './money';
+import { convert, parseAmount, parseDecimal, type FxRates } from './money';
 import type { Currency } from './types';
 
 export interface ParsedLine {
@@ -27,12 +27,21 @@ const QUANTITY = new RegExp(`^(\\d+(?:[.,]\\d+)?)\\s*(?:(?:x|${UNIT_WORDS})\\.?\
 /** Quantity written after the description: "Hex bolt M8 - 100 pcs", "Tornillo M8 x 50 uds". */
 const TRAILING_QUANTITY = new RegExp(`\\s*(?:[-–,:x×]\\s*)?(\\d+(?:[.,]\\d+)?)\\s*(?:${UNIT_WORDS})\\.?$`, 'i');
 const PRICE_SUFFIX =
-  /\s+(@|a|at|precio(?:\s+unitario)?|unit\s+price|price|pvp|p\/u)?\s*(€|us\$|\$|usd|eur)?\s*(\d[\d.,]*)\s*(€|\$|usd|eur|euros?|d[oó]lares?|dollars?)?\s*(?:each|ea|c\/u|cada\s+un[oa]|(?:per|por)\s+(?:pc|piece|unit|ud|unidad|pieza)|\/\s*(?:uds?|u|pzas?|pcs?|pc|piece|unit|unidad))?\s*$/i;
+  /\s+(@|a|at|precio(?:\s+unitario)?|unit\s+price|price|pvp|p\/u)?\s*(€|us\$|\$|usd|eur|₹|inr|rs\.?)?\s*(\d[\d.,]*)\s*(€|\$|usd|eur|euros?|d[oó]lares?|dollars?|₹|inr|rs\.?|rupees?|rupias?)?\s*(?:each|ea|c\/u|cada\s+un[oa]|(?:per|por)\s+(?:pc|piece|unit|ud|unidad|pieza)|\/\s*(?:uds?|u|pzas?|pcs?|pc|piece|unit|unidad))?\s*$/i;
 const BARE_INTEGER_TOKEN = /\s(\d+)$/;
+const DIMENSION_NUMBER = '\\d+(?:[.,]\\d+)?';
+const LENGTH_UNIT = '(?:mm|cm|mts?|m|inch(?:es)?|in|")';
+/** Measurements as two or more numbers joined by "x": "80 x 13 x 2 mm", "60x10x15", "10 x 20 cm". */
+const DIMENSIONS = new RegExp(
+  `(?<![\\p{L}\\d.,])${DIMENSION_NUMBER}(?:\\s*${LENGTH_UNIT})?(?:\\s*x\\s*${DIMENSION_NUMBER}(?:\\s*${LENGTH_UNIT})?)+(?![\\p{L}\\d])(?!\\s*(?:${UNIT_WORDS})\\b)`,
+  'iu',
+);
+const SEPARATORS_AT_EDGES = /^[\s\-–:,]+|[\s\-–:,]+$/g;
 
 function currencyFromToken(token: string | undefined): Currency | null {
   if (!token) return null;
   const t = token.toLowerCase();
+  if (t === '₹' || t.startsWith('inr') || t.startsWith('rs') || t.startsWith('rup')) return 'INR';
   if (t === '€' || t.startsWith('eur')) return 'EUR';
   if (t.includes('$') || t === 'usd' || t.startsWith('d')) return 'USD';
   return null;
@@ -81,10 +90,26 @@ function splitPieceAndMeasurements(text: string): { pieceType: string; measureme
   };
 }
 
+/**
+ * Takes the "n x n x n" measurements out first, wherever they are, so their first number is
+ * never read as the quantity ("80 x 13 x 2 mm - Mother of pearl 20 pieces").
+ */
+function extractDimensions(text: string): { rest: string; dimensions: string } {
+  const match = DIMENSIONS.exec(text);
+  if (!match) return { rest: text, dimensions: '' };
+  const joined = `${text.slice(0, match.index)} ${text.slice(match.index + match[0].length)}`;
+  const rest = joined
+    .replace(/\s+/g, ' ')
+    .replace(/(?:\s*[-–]\s*){2,}/g, ' - ')
+    .replace(SEPARATORS_AT_EDGES, '');
+  return { rest, dimensions: match[0].replace(/\s+/g, ' ').trim() };
+}
+
 export function parseWhatsAppLine(line: string): ParsedLine | null {
   const rawText = line.trim();
-  const text = cleanLine(line).replace(QUANTITY_PREFIX, '');
-  if (text.length === 0) return null;
+  const cleaned = cleanLine(line).replace(QUANTITY_PREFIX, '');
+  if (cleaned.length === 0) return null;
+  const { rest: text, dimensions } = extractDimensions(cleaned);
 
   const issues: string[] = [];
   const quantityMatch = QUANTITY.exec(text);
@@ -111,10 +136,11 @@ export function parseWhatsAppLine(line: string): ParsedLine | null {
   if (!hasQuantity) issues.push(ISSUE_NO_QUANTITY);
   else if (!(quantity > 0)) issues.push(ISSUE_BAD_QUANTITY);
 
-  const { pieceType, measurements } = splitPieceAndMeasurements(rest);
+  const split = splitPieceAndMeasurements(rest);
+  const pieceType = split.pieceType.replace(SEPARATORS_AT_EDGES, '');
 
   if (pieceType.length === 0) issues.push(ISSUE_NO_PIECE_TYPE);
-  if (price.unitPriceCents === null && BARE_INTEGER_TOKEN.test(rest) && measurements.includes(' ')) {
+  if (price.unitPriceCents === null && BARE_INTEGER_TOKEN.test(rest) && split.measurements.includes(' ')) {
     issues.push(ISSUE_MAYBE_PRICE);
   }
 
@@ -122,7 +148,7 @@ export function parseWhatsAppLine(line: string): ParsedLine | null {
     rawText,
     quantity,
     pieceType,
-    measurements,
+    measurements: [dimensions, split.measurements].filter(Boolean).join(' '),
     unitPriceCents: price.unitPriceCents,
     priceCurrency: price.priceCurrency,
     issues,
@@ -142,10 +168,10 @@ export function canImport(line: ParsedLine): boolean {
 }
 
 /** Converts a parsed line to an order line, converting the price into the order currency. */
-export function toImportableLine(line: ParsedLine, orderCurrency: Currency, rateMicros: number): ImportableLine {
+export function toImportableLine(line: ParsedLine, orderCurrency: Currency, rates: FxRates): ImportableLine {
   const priceCurrency = line.priceCurrency ?? orderCurrency;
   const unitPriceCents =
-    line.unitPriceCents === null ? null : convert(line.unitPriceCents, priceCurrency, orderCurrency, rateMicros);
+    line.unitPriceCents === null ? null : convert(line.unitPriceCents, priceCurrency, orderCurrency, rates);
   return {
     quantity: line.quantity,
     pieceType: line.pieceType || line.rawText,
@@ -173,7 +199,8 @@ export interface ParsedMessage {
 const SHIPPING_LINE =
   /^(?:gastos\s+de\s+)?(?:env[ií]o|transporte|portes?|flete|mensajer[ií]a|shipping|freight|delivery|courier|postage)\b/i;
 const TOTAL_LINE = /^(?:sub\s*-?\s*total|total|importe\s+total|grand\s+total)\b/i;
-const AMOUNT = /(€|us\$|\$|usd|eur)?\s*(\d[\d.,]*)\s*(€|\$|usd|eur|euros?|d[oó]lares?|dollars?)?/i;
+const AMOUNT =
+  /(€|us\$|\$|usd|eur|₹|inr|rs\.?)?\s*(\d[\d.,]*)\s*(€|\$|usd|eur|euros?|d[oó]lares?|dollars?|₹|inr|rs\.?|rupees?|rupias?)?/i;
 
 function parseShipping(text: string, rawText: string): ShippingQuote | null {
   const match = AMOUNT.exec(text);

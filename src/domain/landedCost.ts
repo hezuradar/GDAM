@@ -1,4 +1,4 @@
-import { convert } from './money';
+import { convert, withUsdRate, type FxRates } from './money';
 import type { Currency } from './types';
 
 /** One purchased product (order line) with what is needed to know its real unit cost. */
@@ -31,7 +31,7 @@ export interface ProductSource {
 }
 
 export interface ProductCost extends ProductSource {
-  readonly rateMicros: number;
+  readonly rates: FxRates;
   /** Shipping + customs per unit, allocated by line value (order currency). */
   readonly allocatedPerUnitCents: number | null;
   /** Unit price (or theoretical value) + allocated shipping and customs (order currency). */
@@ -44,32 +44,32 @@ export interface ProductCost extends ProductSource {
  * Landed cost per unit: each order's shipping + customs (converted to the order currency)
  * is split among its priced lines in proportion to their value, then divided by quantity.
  */
-export function computeProductCosts(rows: readonly ProductSource[], fallbackRateMicros: number): ProductCost[] {
+export function computeProductCosts(rows: readonly ProductSource[], marketRates: FxRates): ProductCost[] {
   const goodsByOrder = new Map<number, number>();
   for (const r of rows) {
     if (r.unitPriceCents !== null) goodsByOrder.set(r.orderId, (goodsByOrder.get(r.orderId) ?? 0) + r.quantity * r.unitPriceCents);
   }
   return rows.map((r) => {
-    const rateMicros = r.fxRateMicros ?? fallbackRateMicros;
+    const rates = withUsdRate(marketRates, r.fxRateMicros);
     const goods = goodsByOrder.get(r.orderId) ?? 0;
     const hasRealPrice = r.unitPriceCents !== null && r.unitPriceCents > 0;
     const theoretical =
       !hasRealPrice && r.theoreticalCostCents !== null
-        ? convert(r.theoreticalCostCents, r.theoreticalCurrency ?? r.currency, r.currency, rateMicros)
+        ? convert(r.theoreticalCostCents, r.theoreticalCurrency ?? r.currency, r.currency, rates)
         : null;
     const baseUnitCents = hasRealPrice ? r.unitPriceCents : (theoretical ?? r.unitPriceCents);
     if (baseUnitCents === null || r.quantity <= 0) {
-      return { ...r, rateMicros, allocatedPerUnitCents: null, landedUnitCents: null, usesTheoreticalCost: false };
+      return { ...r, rates, allocatedPerUnitCents: null, landedUnitCents: null, usesTheoreticalCost: false };
     }
     // Shipping and customs follow the real paid value: zero-price replacements take no share.
     const extra =
-      convert(r.shippingCents, r.shippingCurrency, r.currency, rateMicros) +
-      convert(r.customsCents, r.customsCurrency, r.currency, rateMicros);
+      convert(r.shippingCents, r.shippingCurrency, r.currency, rates) +
+      convert(r.customsCents, r.customsCurrency, r.currency, rates);
     const lineValue = r.quantity * (r.unitPriceCents ?? 0);
     const allocatedPerUnitCents = goods > 0 ? Math.round((extra * lineValue) / goods / r.quantity) : 0;
     return {
       ...r,
-      rateMicros,
+      rates,
       allocatedPerUnitCents,
       landedUnitCents: baseUnitCents + allocatedPerUnitCents,
       usesTheoreticalCost: theoretical !== null,
@@ -102,7 +102,7 @@ export interface SaleInfo {
  * derived from it); otherwise a stored margin produces the sale price.
  */
 export function productSaleInfo(product: ProductCost, display: Currency): SaleInfo {
-  const toDisplay = (cents: number, from: Currency) => convert(cents, from, display, product.rateMicros);
+  const toDisplay = (cents: number, from: Currency) => convert(cents, from, display, product.rates);
   const landed = product.landedUnitCents === null ? null : toDisplay(product.landedUnitCents, product.currency);
   if (product.salePriceCents !== null) {
     const sale = toDisplay(product.salePriceCents, product.saleCurrency ?? product.currency);

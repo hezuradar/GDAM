@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { formatDate, formatQuantity } from '@/domain/exportText';
-import { displayAmount, formatMoney, formatRate } from '@/domain/money';
+import { displayAmount, formatMoney, formatRate, type FxRates } from '@/domain/money';
 import { useDisplayCurrency } from '@/hooks/useDisplayCurrency';
 import type { PaymentSummary } from '@/domain/payments';
 import { lineTotalCents, type OrderTotals } from '@/domain/totals';
@@ -16,7 +16,7 @@ type TotalsCardProps = { totals: OrderTotals; payment: PaymentSummary; currency:
 export function TotalsCard({ totals, payment, currency, usesOrderRate }: TotalsCardProps) {
   const styles = useThemedStyles(makeStyles);
   const display = useDisplayCurrency();
-  const shown = (cents: number) => displayAmount(cents, currency, display, totals.rateMicros);
+  const shown = (cents: number) => displayAmount(cents, currency, display, totals.rates);
   const money = (cents: number) => {
     const amount = shown(cents);
     return formatMoney(amount.cents, amount.currency);
@@ -55,7 +55,8 @@ export function TotalsCard({ totals, payment, currency, usesOrderRate }: TotalsC
       ) : null}
       <Text style={styles.note}>
         {isConverted ? `Importes convertidos de ${currency} a ${display}. ` : ''}Cambio usado: 1 € ={' '}
-        {formatRate(totals.rateMicros)} US$ ({rateSource})
+        {formatRate(totals.rates.usdMicros)} US$
+        {currency === 'INR' || display === 'INR' ? ` · 1 € = ${formatRate(totals.rates.inrMicros)} ₹` : ''} ({rateSource})
       </Text>
     </Card>
   );
@@ -64,15 +65,15 @@ export function TotalsCard({ totals, payment, currency, usesOrderRate }: TotalsC
 type LinesListProps = {
   lines: readonly OrderLine[];
   currency: Currency;
-  rateMicros: number;
+  rates: FxRates;
   onPressLine: (id: number) => void;
 };
 
-export function LinesList({ lines, currency, rateMicros, onPressLine }: LinesListProps) {
+export function LinesList({ lines, currency, rates, onPressLine }: LinesListProps) {
   const styles = useThemedStyles(makeStyles);
   const display = useDisplayCurrency();
   const money = (cents: number) => {
-    const amount = displayAmount(cents, currency, display, rateMicros);
+    const amount = displayAmount(cents, currency, display, rates);
     return formatMoney(amount.cents, amount.currency);
   };
   return (

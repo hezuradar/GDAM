@@ -9,7 +9,7 @@ import { Card, EmptyState, ErrorView, FormScroll, InfoRow, LoadingView } from '@
 import { TextField } from '@/components/ui/TextField';
 import { deletePayment, getPayment, savePayment } from '@/api/data';
 import { todayIso } from '@/domain/dates';
-import { centsToInput, convert, formatMoney, formatRate, parseAmount, parseRate } from '@/domain/money';
+import { centsToInput, convert, formatMoney, formatRate, parseAmount, parseRate, withUsdRate } from '@/domain/money';
 import { CURRENCIES, PAYMENT_METHODS, type Currency, type PaymentMethod } from '@/domain/types';
 import { useOrderDetail } from '@/hooks/useOrderDetail';
 import { PAYMENT_METHOD_LABEL } from '@/i18n/es';
@@ -59,15 +59,18 @@ export default function PaymentFormScreen() {
   const { order, totals, payment } = data;
   const payCurrency = currency ?? order.currency;
   const isForeign = payCurrency !== order.currency;
-  const rateMicros = isForeign ? (parseRate(rate) ?? totals.rateMicros) : null;
+  // A bank EUR↔USD rate can be frozen on the payment; rupee payments always use the market rate.
+  const isEurUsdPair = isForeign && payCurrency !== 'INR' && order.currency !== 'INR';
+  const rateMicros = isEurUsdPair ? (parseRate(rate) ?? totals.rates.usdMicros) : null;
+  const paymentRates = withUsdRate(totals.rates, rateMicros);
   const amountCents = parseAmount(amount);
   const fillPending = (fraction: number) =>
-    setAmount(centsToInput(Math.round(convert(payment.pendingCents * fraction, order.currency, payCurrency, totals.rateMicros))));
+    setAmount(centsToInput(Math.round(convert(payment.pendingCents * fraction, order.currency, payCurrency, totals.rates))));
 
   const handleSave = async () => {
     const found: Errors = {};
     if (amountCents === null || amountCents <= 0) found.amount = 'Introduce un importe mayor que 0';
-    if (isForeign && rate.trim() && parseRate(rate) === null) found.rate = 'Cambio no válido (ej. 1,08)';
+    if (isEurUsdPair && rate.trim() && parseRate(rate) === null) found.rate = 'Cambio no válido (ej. 1,08)';
     setErrors(found);
     if (!announceErrors(found) || amountCents === null || isSaving) return;
     setSaving(true);
@@ -112,18 +115,22 @@ export default function PaymentFormScreen() {
       <ChipGroup<Currency> label="Moneda del pago" value={payCurrency} options={CURRENCIES.map((c) => ({ value: c, label: c }))} onChange={setCurrency} />
       {isForeign ? (
         <>
-          <TextField
-            label="Cambio aplicado (1 € = … US$)"
-            value={rate}
-            onChangeText={setRate}
-            keyboardType="decimal-pad"
-            placeholder={formatRate(totals.rateMicros)}
-            error={errors.rate}
-            hint="El del banco, si lo sabes. Vacío = cambio del pedido."
-          />
-          {amountCents && rateMicros ? (
+          {isEurUsdPair ? (
+            <TextField
+              label="Cambio aplicado (1 € = … US$)"
+              value={rate}
+              onChangeText={setRate}
+              keyboardType="decimal-pad"
+              placeholder={formatRate(totals.rates.usdMicros)}
+              error={errors.rate}
+              hint="El del banco, si lo sabes. Vacío = cambio del pedido."
+            />
+          ) : (
+            <Text style={styles.equivalent}>Cambio de mercado: 1 € = {formatRate(totals.rates.inrMicros)} ₹</Text>
+          )}
+          {amountCents ? (
             <Text style={styles.equivalent} accessibilityLiveRegion="polite">
-              Equivale a {formatMoney(convert(amountCents, payCurrency, order.currency, rateMicros), order.currency)}
+              Equivale a {formatMoney(convert(amountCents, payCurrency, order.currency, paymentRates), order.currency)}
             </Text>
           ) : null}
         </>

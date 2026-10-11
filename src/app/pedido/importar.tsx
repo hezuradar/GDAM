@@ -82,7 +82,7 @@ export default function ImportScreen() {
     if (isSaving) return;
     setSaving(true);
     try {
-      const inputs = included.map((line) => toImportableLine(line, order.currency, totals.rateMicros));
+      const inputs = included.map((line) => toImportableLine(line, order.currency, totals.rates));
       if (inputs.length > 0) await importLines(order.id, inputs, replaceExisting);
       if (message.shipping && applyShipping) {
         const { id: _id, ...orderInput } = order;

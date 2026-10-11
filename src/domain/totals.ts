@@ -1,4 +1,4 @@
-import { convert } from './money';
+import { convert, withUsdRate, type FxRates } from './money';
 import type { Order, OrderLine } from './types';
 
 export type OrderMoneyFields = Pick<
@@ -13,30 +13,30 @@ export interface OrderTotals {
   readonly customsCents: number;
   readonly totalCents: number;
   readonly pendingPriceCount: number;
-  /** Rate actually used: the order snapshot, or the global fallback. */
-  readonly rateMicros: number;
+  /** Rates actually used: the order's frozen EUR→USD rate (if any) over the market rates. */
+  readonly rates: FxRates;
 }
 
 export function lineTotalCents(line: LineMoneyFields): number | null {
   return line.unitPriceCents === null ? null : Math.round(line.quantity * line.unitPriceCents);
 }
 
-export function effectiveRate(order: Pick<Order, 'fxRateMicros'>, fallbackRateMicros: number): number {
-  return order.fxRateMicros ?? fallbackRateMicros;
+export function effectiveRates(order: Pick<Order, 'fxRateMicros'>, marketRates: FxRates): FxRates {
+  return withUsdRate(marketRates, order.fxRateMicros);
 }
 
 /** All amounts are returned in the order currency. Lines without price count as 0. */
 export function orderTotals(
   order: OrderMoneyFields,
   lines: readonly LineMoneyFields[],
-  fallbackRateMicros: number,
+  marketRates: FxRates,
 ): OrderTotals {
-  const rateMicros = effectiveRate(order, fallbackRateMicros);
+  const rates = effectiveRates(order, marketRates);
   const lineTotals = lines.map(lineTotalCents);
   const goodsCents = lineTotals.reduce<number>((sum, total) => sum + (total ?? 0), 0);
   const pendingPriceCount = lineTotals.filter((total) => total === null).length;
-  const shippingCents = convert(order.shippingCents, order.shippingCurrency, order.currency, rateMicros);
-  const customsCents = convert(order.customsCents, order.customsCurrency, order.currency, rateMicros);
+  const shippingCents = convert(order.shippingCents, order.shippingCurrency, order.currency, rates);
+  const customsCents = convert(order.customsCents, order.customsCurrency, order.currency, rates);
 
   return {
     goodsCents,
@@ -44,6 +44,6 @@ export function orderTotals(
     customsCents,
     totalCents: goodsCents + shippingCents + customsCents,
     pendingPriceCount,
-    rateMicros,
+    rates,
   };
 }

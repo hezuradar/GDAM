@@ -1,6 +1,6 @@
 import type { FxQuote } from '../domain/fxRate';
 import { plural } from '../domain/exportText';
-import { convert } from '../domain/money';
+import { convert, marketRates, withUsdRate } from '../domain/money';
 import { CURRENCIES, type Currency, type Order, type OrderLine, type OrderStatus, type Payment, type Supplier } from '../domain/types';
 import { HttpError, notFound } from './http';
 import type { ImportInput, LineInput, LinePricingInput, OrderInput, PaymentInput, SettingsInput, SupplierInput } from './validate';
@@ -141,14 +141,14 @@ export async function updateOrder(db: D1Database, id: number, input: OrderInput)
 
   const statements: D1PreparedStatement[] = [];
   if (previous.currency !== input.currency) {
-    const rate = input.fxRateMicros ?? (await getSettings(db)).fxRateMicros;
+    const rates = withUsdRate(marketRates(await getSettings(db)), input.fxRateMicros);
     const lines = await all<{ id: number; unit_price_cents: number }>(
       db,
       'SELECT id, unit_price_cents FROM order_lines WHERE order_id = ? AND unit_price_cents IS NOT NULL',
       id,
     );
     for (const line of lines) {
-      const converted = convert(line.unit_price_cents, previous.currency, input.currency, rate);
+      const converted = convert(line.unit_price_cents, previous.currency, input.currency, rates);
       statements.push(db.prepare('UPDATE order_lines SET unit_price_cents = ? WHERE id = ?').bind(converted, line.id));
     }
   }
@@ -347,11 +347,21 @@ export interface AppSettings {
   readonly fxSource: string | null;
   readonly fxAsOf: string | null;
   readonly fxUpdatedAt: string | null;
+  /** "1 EUR = X INR" * 1e6, always from the market (refreshed hourly). */
+  readonly inrRateMicros: number;
+  /** null until the first market quote for the rupee is stored. */
+  readonly inrUpdatedAt: string | null;
+  /** Last attempt to fetch the rupee rate (successful or not): limits retries to once per hour. */
+  readonly inrCheckedAt: string | null;
 }
 
 const DEFAULT_FX_RATE_MICROS = 1_120_000;
+const DEFAULT_INR_RATE_MICROS = 100_000_000;
 const KEY = {
   fx: 'fx_eur_usd_micros',
+  inr: 'fx_eur_inr_micros',
+  inrUpdatedAt: 'fx_inr_updated_at',
+  inrCheckedAt: 'fx_inr_checked_at',
   currency: 'default_currency',
   fxAuto: 'fx_auto',
   fxSource: 'fx_source',
@@ -364,8 +374,12 @@ export async function getSettings(db: D1Database): Promise<AppSettings> {
   const rows = await all<{ key: string; value: string }>(db, 'SELECT key, value FROM settings');
   const map = new Map(rows.map((r) => [r.key, r.value]));
   const rate = Number(map.get(KEY.fx));
+  const inrRate = Number(map.get(KEY.inr));
   return {
     fxRateMicros: Number.isInteger(rate) && rate > 0 ? rate : DEFAULT_FX_RATE_MICROS,
+    inrRateMicros: Number.isInteger(inrRate) && inrRate > 0 ? inrRate : DEFAULT_INR_RATE_MICROS,
+    inrUpdatedAt: map.get(KEY.inrUpdatedAt) ?? null,
+    inrCheckedAt: map.get(KEY.inrCheckedAt) ?? null,
     defaultCurrency: CURRENCIES.find((c) => c === map.get(KEY.currency)) ?? 'USD',
     fxAuto: map.get(KEY.fxAuto) !== '0',
     fxSource: map.get(KEY.fxSource) ?? null,
@@ -390,13 +404,29 @@ export async function saveSettings(db: D1Database, input: SettingsInput): Promis
   await db.batch(statements);
 }
 
-export async function saveFxQuote(db: D1Database, quote: FxQuote, fetchedAt: string): Promise<void> {
-  await db.batch([
-    upsert(db, KEY.fx, String(quote.rateMicros)),
-    upsert(db, KEY.fxSource, quote.source),
-    upsert(db, KEY.fxAsOf, quote.asOf),
-    upsert(db, KEY.fxUpdatedAt, fetchedAt),
-  ]);
+export async function markInrChecked(db: D1Database, at: string): Promise<void> {
+  await upsert(db, KEY.inrCheckedAt, at).run();
+}
+
+/** Stores the EUR/USD quote (when given) and the EUR/INR rate (when given). */
+export async function saveFxQuote(
+  db: D1Database,
+  update: { readonly usd: FxQuote | null; readonly inrMicros: number | null },
+  fetchedAt: string,
+): Promise<void> {
+  const statements: D1PreparedStatement[] = [];
+  if (update.usd) {
+    statements.push(
+      upsert(db, KEY.fx, String(update.usd.rateMicros)),
+      upsert(db, KEY.fxSource, update.usd.source),
+      upsert(db, KEY.fxAsOf, update.usd.asOf),
+      upsert(db, KEY.fxUpdatedAt, fetchedAt),
+    );
+  }
+  if (update.inrMicros !== null) {
+    statements.push(upsert(db, KEY.inr, String(update.inrMicros)), upsert(db, KEY.inrUpdatedAt, fetchedAt));
+  }
+  if (statements.length > 0) await db.batch(statements);
 }
 
 // ---------- Backup ----------

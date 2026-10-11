@@ -1,4 +1,4 @@
-export const CURRENCIES = ['EUR', 'USD'] as const;
+export const CURRENCIES = ['EUR', 'USD', 'INR'] as const;
 export type Currency = (typeof CURRENCIES)[number];
 
 export const ORDER_STATUSES = ['borrador', 'confirmado', 'enviado', 'recibido', 'cancelado'] as const;

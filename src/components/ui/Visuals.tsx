@@ -133,6 +133,7 @@ const DISPLAY_OPTIONS: readonly { value: Currency | null; label: string; a11y: s
   { value: null, label: 'Original', a11y: 'Moneda original de cada pedido' },
   { value: 'EUR', label: '€', a11y: 'Euros' },
   { value: 'USD', label: 'US$', a11y: 'Dólares' },
+  { value: 'INR', label: '₹', a11y: 'Rupias' },
 ];
 
 /** Segmented control to view amounts in each order's currency, in euros or in dollars. */

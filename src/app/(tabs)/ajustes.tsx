@@ -70,7 +70,7 @@ export default function SettingsScreen() {
     try {
       const settings = await refreshFxRate();
       setRateText(formatRate(settings.fxRateMicros));
-      announce(`Cambio actualizado: 1 euro igual a ${formatRate(settings.fxRateMicros)} dólares`);
+      announce(`Cambio actualizado: 1 euro igual a ${formatRate(settings.fxRateMicros)} dólares y ${formatRate(settings.inrRateMicros)} rupias`);
       await reload();
     } catch (e: unknown) {
       showError('No se pudo actualizar el cambio', e);
@@ -120,9 +120,11 @@ export default function SettingsScreen() {
 
   return (
     <FormScroll>
-      <SectionHeader title="Cambio euro / dólar" />
+      <SectionHeader title="Tipos de cambio" />
       <Card>
         <InfoRow label="1 € =" value={`${formatRate(data.fxRateMicros)} US$`} isStrong />
+        <InfoRow label="1 € =" value={`${formatRate(data.inrRateMicros)} ₹`} isStrong />
+        <Text style={styles.body}>La rupia (₹) se actualiza siempre con el cambio del mercado, cada hora.</Text>
         <Text style={styles.body}>{rateDescription(data)}</Text>
         <View style={styles.switchRow}>
           <Text style={styles.switchLabel} accessibilityElementsHidden importantForAccessibility="no">

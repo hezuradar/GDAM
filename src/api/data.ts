@@ -13,6 +13,9 @@ export interface AppSettings {
   readonly fxSource: string | null;
   readonly fxAsOf: string | null;
   readonly fxUpdatedAt: string | null;
+  /** "1 EUR = X INR" * 1e6, always from the market. */
+  readonly inrRateMicros: number;
+  readonly inrUpdatedAt: string | null;
 }
 
 export type SupplierInput = Omit<Supplier, 'id'>;

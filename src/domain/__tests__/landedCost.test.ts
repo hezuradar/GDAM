@@ -7,7 +7,7 @@ import {
   type ProductSource,
 } from '../landedCost';
 
-const RATE = 1_100_000; // 1 EUR = 1.10 USD
+const RATE = { usdMicros: 1_100_000, inrMicros: 100_000_000 }; // 1 EUR = 1.10 USD = 100 INR
 
 const row = (overrides: Partial<ProductSource>): ProductSource => ({
   lineId: 1,

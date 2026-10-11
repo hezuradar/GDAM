@@ -1,6 +1,7 @@
-/** A market EUR→USD quote: "1 EUR = X USD" stored as X * 1e6. */
+/** A market quote: "1 EUR = X USD" (and "1 EUR = X INR" when available), stored as X * 1e6. */
 export interface FxQuote {
   readonly rateMicros: number;
+  readonly inrMicros: number | null;
   /** When the provider last updated the rate (ISO date or date-time). */
   readonly asOf: string;
   readonly source: string;
@@ -17,11 +18,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function toRateMicros(value: unknown): number | null {
+/** Sanity bounds for EUR/INR. */
+const MIN_PLAUSIBLE_INR = 40;
+const MAX_PLAUSIBLE_INR = 250;
+
+function toMicrosWithin(value: unknown, min: number, max: number): number | null {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null;
-  if (value < MIN_PLAUSIBLE || value > MAX_PLAUSIBLE) return null;
+  if (value < min || value > max) return null;
   return Math.round(value * MICROS);
 }
+
+const toRateMicros = (value: unknown) => toMicrosWithin(value, MIN_PLAUSIBLE, MAX_PLAUSIBLE);
+const toInrMicros = (value: unknown) => toMicrosWithin(value, MIN_PLAUSIBLE_INR, MAX_PLAUSIBLE_INR);
 
 /** https://open.er-api.com/v6/latest/EUR */
 export function parseOpenErApi(payload: unknown): FxQuote | null {
@@ -32,7 +40,7 @@ export function parseOpenErApi(payload: unknown): FxQuote | null {
   if (rateMicros === null) return null;
   const unix = payload.time_last_update_unix;
   const asOf = typeof unix === 'number' ? new Date(unix * 1000).toISOString() : new Date().toISOString();
-  return { rateMicros, asOf, source: 'open.er-api.com' };
+  return { rateMicros, inrMicros: toInrMicros(rates.INR), asOf, source: 'open.er-api.com' };
 }
 
 /** https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/eur.min.json */
@@ -41,7 +49,7 @@ export function parseCurrencyApi(payload: unknown): FxQuote | null {
   const rateMicros = toRateMicros(payload.eur.usd);
   if (rateMicros === null) return null;
   const asOf = typeof payload.date === 'string' ? payload.date : new Date().toISOString();
-  return { rateMicros, asOf, source: 'currency-api' };
+  return { rateMicros, inrMicros: toInrMicros(payload.eur.inr), asOf, source: 'currency-api' };
 }
 
 /** Largest accepted jump versus the stored market rate; bigger jumps are treated as bad data. */

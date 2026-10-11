@@ -1,3 +1,4 @@
+import { marketRates } from '@/domain/money';
 import { loadOrderListRaw, type AppSettings } from '@/api/data';
 import type { OrderListItem } from '@/domain/orderFilters';
 import { buildOrderListItems } from '@/domain/orderList';
@@ -17,7 +18,7 @@ export async function loadOrderList(): Promise<OrderListData> {
     lines,
     payments,
     supplierNames: new Map(suppliers.map((s) => [s.id, s.name])),
-    fallbackRateMicros: settings.fxRateMicros,
+    marketRates: marketRates(settings),
   });
   return { items, suppliers, settings };
 }

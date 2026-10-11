@@ -16,8 +16,9 @@ import {
   salePriceFromMargin,
   type ProductCost,
 } from '@/domain/landedCost';
-import { centsToInput, convert, formatMoney, parseAmount, parseDecimal } from '@/domain/money';
+import { centsToInput, convert, currencySymbol, formatMoney, marketRates, parseAmount, parseDecimal } from '@/domain/money';
 import { CURRENCIES, type Currency } from '@/domain/types';
+import { CURRENCY_LABEL } from '@/i18n/es';
 import { useLoader } from '@/hooks/useLoader';
 import { goBack, parseIdParam } from '@/lib/params';
 import { typography, useThemedStyles, type Theme } from '@/theme/theme';
@@ -37,7 +38,7 @@ export default function ProductPricingScreen() {
   const styles = useThemedStyles(makeStyles);
   const load = useCallback(async (): Promise<ProductCost | null> => {
     const { products, settings } = await listProducts();
-    return computeProductCosts(products, settings.fxRateMicros).find((p) => p.lineId === lineId) ?? null;
+    return computeProductCosts(products, marketRates(settings)).find((p) => p.lineId === lineId) ?? null;
   }, [lineId]);
   const { data: product, error, loading, reload } = useLoader(load);
   const [currency, setCurrency] = useState<Currency>('EUR');
@@ -53,7 +54,7 @@ export default function ProductPricingScreen() {
   // Zero-price replacements (or lines without price) are costed with a theoretical value.
   const needsTheoretical = !!product && (product.unitPriceCents === null || product.unitPriceCents === 0);
   const theoreticalCents = theoreticalText.trim() === '' ? null : parseAmount(theoreticalText);
-  const allocatedDisplay = product ? convert(product.allocatedPerUnitCents ?? 0, product.currency, currency, product.rateMicros) : 0;
+  const allocatedDisplay = product ? convert(product.allocatedPerUnitCents ?? 0, product.currency, currency, product.rates) : 0;
   const landed = needsTheoretical
     ? theoreticalCents === null
       ? null
@@ -69,7 +70,7 @@ export default function ProductPricingScreen() {
     setMarginText(marginToInput(initial.marginBp));
     if (product.theoreticalCostCents !== null) {
       const from = product.theoreticalCurrency ?? product.currency;
-      setTheoreticalText(centsToInput(convert(product.theoreticalCostCents, from, 'EUR', product.rateMicros)));
+      setTheoreticalText(centsToInput(convert(product.theoreticalCostCents, from, 'EUR', product.rates)));
     }
   }, [product]);
 
@@ -80,8 +81,8 @@ export default function ProductPricingScreen() {
 
   const changeCurrency = (next: Currency) => {
     const sale = parseAmount(saleText);
-    if (sale !== null) setSaleText(centsToInput(convert(sale, currency, next, product.rateMicros)));
-    if (theoreticalCents !== null) setTheoreticalText(centsToInput(convert(theoreticalCents, currency, next, product.rateMicros)));
+    if (sale !== null) setSaleText(centsToInput(convert(sale, currency, next, product.rates)));
+    if (theoreticalCents !== null) setTheoreticalText(centsToInput(convert(theoreticalCents, currency, next, product.rates)));
     setCurrency(next);
   };
   const onTheoreticalChange = (text: string) => {
@@ -155,7 +156,7 @@ export default function ProductPricingScreen() {
   };
 
   const title = [formatQuantity(product.quantity), '×', product.pieceType, product.measurements].filter(Boolean).join(' ');
-  const money = (cents: number) => formatMoney(convert(cents, product.currency, currency, product.rateMicros), currency);
+  const money = (cents: number) => formatMoney(convert(cents, product.currency, currency, product.rates), currency);
 
   return (
     <FormScroll>
@@ -169,7 +170,7 @@ export default function ProductPricingScreen() {
       <ChipGroup<Currency>
         label="Moneda"
         value={currency}
-        options={CURRENCIES.map((c) => ({ value: c, label: c === 'EUR' ? 'Euros (€)' : 'Dólares (US$)' }))}
+        options={CURRENCIES.map((c) => ({ value: c, label: CURRENCY_LABEL[c] }))}
         onChange={changeCurrency}
       />
 
@@ -178,7 +179,7 @@ export default function ProductPricingScreen() {
         <Card>
           <InfoRow icon="receipt-outline" label="Precio en el pedido" value={product.unitPriceCents === null ? 'Sin precio' : money(0)} />
           <TextField
-            label={`Valor teórico por unidad (${currency === 'EUR' ? '€' : 'US$'})`}
+            label={`Valor teórico por unidad (${currencySymbol(currency)})`}
             value={theoreticalText}
             onChangeText={onTheoreticalChange}
             keyboardType="decimal-pad"
@@ -208,7 +209,7 @@ export default function ProductPricingScreen() {
       <SectionHeader title="Venta" icon="cart-outline" />
       <Card>
         <TextField
-          label={`Precio de venta por unidad (${currency === 'EUR' ? '€' : 'US$'})`}
+          label={`Precio de venta por unidad (${currencySymbol(currency)})`}
           value={saleText}
           onChangeText={onSaleChange}
           keyboardType="decimal-pad"

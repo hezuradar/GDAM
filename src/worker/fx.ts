@@ -1,7 +1,9 @@
 import { isFxStale, isPlausibleFxChange, parseCurrencyApi, parseOpenErApi, type FxQuote } from '../domain/fxRate';
-import { getSettings, saveFxQuote } from './repo';
+import { getSettings, markInrChecked, saveFxQuote } from './repo';
 
 const REQUEST_TIMEOUT_MS = 8000;
+/** A stored rupee rate older than this no longer limits how much the next quote may differ. */
+const INR_JUMP_WINDOW_MS = 48 * 60 * 60 * 1000;
 
 /** Public, key-less EUR/USD sources. Tried in order; the first valid answer wins. */
 const SOURCES: readonly { url: string; parse: (payload: unknown) => FxQuote | null }[] = [
@@ -25,20 +27,40 @@ export async function fetchEurUsd(): Promise<FxQuote> {
   throw new Error(`No se pudo obtener el cambio (${failures.join('; ')})`);
 }
 
-export async function refreshFx(db: D1Database): Promise<FxQuote> {
+/**
+ * Downloads the market rates. EUR/USD is stored only when `updateUsd` (it may be manual);
+ * EUR/INR is always market-based and stored whenever the quote has a plausible value.
+ */
+export async function refreshFx(db: D1Database, updateUsd = true): Promise<FxQuote> {
   const quote = await fetchEurUsd();
   const current = await getSettings(db);
   const previousMarketRate = current.fxSource && current.fxSource !== 'manual' ? current.fxRateMicros : null;
-  if (!isPlausibleFxChange(previousMarketRate, quote.rateMicros)) {
+  if (updateUsd && !isPlausibleFxChange(previousMarketRate, quote.rateMicros)) {
     console.warn('Rejected implausible EUR/USD quote', quote, 'previous', previousMarketRate);
     throw new Error('La fuente devolvió un cambio muy distinto al anterior; se mantiene el cambio actual.');
   }
-  await saveFxQuote(db, quote, new Date().toISOString());
+  // Only a recent rupee rate limits the jump, so a legitimate move cannot block updates forever.
+  const hasRecentInr = current.inrUpdatedAt !== null && !isFxStale(current.inrUpdatedAt, new Date(), INR_JUMP_WINDOW_MS);
+  const previousInr = hasRecentInr ? current.inrRateMicros : null;
+  const isInrPlausible = quote.inrMicros !== null && isPlausibleFxChange(previousInr, quote.inrMicros);
+  if (quote.inrMicros !== null && !isInrPlausible) {
+    console.warn('Rejected implausible EUR/INR quote', quote.inrMicros, 'previous', previousInr);
+  }
+  await saveFxQuote(
+    db,
+    { usd: updateUsd ? quote : null, inrMicros: isInrPlausible ? quote.inrMicros : null },
+    new Date().toISOString(),
+  );
   return quote;
 }
 
-/** Cron + app start: refresh only in automatic mode and when the stored rate is older than an hour. */
+/** Cron + app start: refresh rates older than an hour (EUR/USD only in automatic mode). */
 export async function refreshFxIfStale(db: D1Database): Promise<void> {
   const settings = await getSettings(db);
-  if (settings.fxAuto && isFxStale(settings.fxUpdatedAt)) await refreshFx(db);
+  const isUsdDue = settings.fxAuto && isFxStale(settings.fxUpdatedAt);
+  const isInrDue = isFxStale(settings.inrCheckedAt);
+  if (!isUsdDue && !isInrDue) return;
+  // Recorded before fetching: a failing or rate-less source is retried at most once per hour.
+  if (isInrDue) await markInrChecked(db, new Date().toISOString());
+  await refreshFx(db, isUsdDue);
 }

@@ -1,8 +1,34 @@
 import type { Currency } from './types';
 
 const MICROS = 1_000_000;
-const CURRENCY_SUFFIX: Record<Currency, string> = { EUR: '€', USD: 'US$' };
-const AMOUNT_NOISE = /[\s€$]|eur|usd|us/gi;
+const CURRENCY_SUFFIX: Record<Currency, string> = { EUR: '€', USD: 'US$', INR: '₹' };
+const AMOUNT_NOISE = /[\s€$₹]|eur|usd|us|inr|rs/gi;
+
+/** Market rates with the euro as pivot: "1 EUR = X USD" and "1 EUR = X INR", both * 1e6. */
+export interface FxRates {
+  readonly usdMicros: number;
+  readonly inrMicros: number;
+}
+
+/** Short symbol shown next to amounts and in field labels: €, US$, ₹. */
+export function currencySymbol(currency: Currency): string {
+  return CURRENCY_SUFFIX[currency];
+}
+
+/** Market rates as stored in the settings. */
+export function marketRates(settings: { readonly fxRateMicros: number; readonly inrRateMicros: number }): FxRates {
+  return { usdMicros: settings.fxRateMicros, inrMicros: settings.inrRateMicros };
+}
+
+/** An order or payment may freeze its own EUR→USD rate; the rupee always uses the market rate. */
+export function withUsdRate(rates: FxRates, usdMicros: number | null): FxRates {
+  return usdMicros === null ? rates : { ...rates, usdMicros };
+}
+
+function unitsPerEuro(currency: Currency, rates: FxRates): number {
+  if (currency === 'EUR') return MICROS;
+  return currency === 'USD' ? rates.usdMicros : rates.inrMicros;
+}
 
 /**
  * Normalises a number written in Spanish or English style ("1.234,50", "1,234.50",
@@ -61,17 +87,15 @@ export function centsToInput(cents: number | null): string {
   return `${cents < 0 ? '-' : ''}${Math.floor(abs / 100)},${decimals}`;
 }
 
-/**
- * Converts cents between currencies. rateMicros is "1 EUR = X USD" * 1e6.
- */
-export function convert(cents: number, from: Currency, to: Currency, rateMicros: number): number {
+/** Converts cents between currencies through the euro. */
+export function convert(cents: number, from: Currency, to: Currency, rates: FxRates): number {
   if (from === to) return cents;
-  if (!(rateMicros > 0)) {
+  const fromPerEuro = unitsPerEuro(from, rates);
+  const toPerEuro = unitsPerEuro(to, rates);
+  if (!(fromPerEuro > 0) || !(toPerEuro > 0)) {
     throw new Error('El tipo de cambio debe ser mayor que cero');
   }
-  return from === 'EUR'
-    ? Math.round((cents * rateMicros) / MICROS)
-    : Math.round((cents * MICROS) / rateMicros);
+  return Math.round((cents * toPerEuro) / fromPerEuro);
 }
 
 /**
@@ -82,10 +106,10 @@ export function displayAmount(
   cents: number,
   from: Currency,
   display: Currency | null,
-  rateMicros: number,
+  rates: FxRates,
 ): { cents: number; currency: Currency } {
   if (display === null || display === from) return { cents, currency: from };
-  return { cents: convert(cents, from, display, rateMicros), currency: display };
+  return { cents: convert(cents, from, display, rates), currency: display };
 }
 
 /** Parses "1,08" → 1080000 micros. Null when invalid or not positive. */

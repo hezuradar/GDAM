@@ -29,7 +29,7 @@ describe('buildOrderListItems', () => {
       ],
       payments: [{ orderId: 1, amountCents: 1000, currency: 'EUR', fxRateMicros: null }],
       supplierNames: new Map([[1, 'Aceros'], [2, 'Tubos']]),
-      fallbackRateMicros: 1_080_000,
+      marketRates: { usdMicros: 1_080_000, inrMicros: 100_000_000 },
     });
 
     expect(items[0]).toMatchObject({
@@ -40,7 +40,7 @@ describe('buildOrderListItems', () => {
       paymentStatus: 'parcial',
       pendingPriceCount: 1,
       lineCount: 2,
-      rateMicros: 1_080_000,
+      rates: { usdMicros: 1_080_000, inrMicros: 100_000_000 },
     });
     expect(items[0].searchText).toContain('brida DN50');
     expect(items[0].searchText).toContain('urgente');
@@ -53,7 +53,7 @@ describe('buildOrderListItems', () => {
       lines: [],
       payments: [],
       supplierNames: new Map(),
-      fallbackRateMicros: 1_000_000,
+      marketRates: { usdMicros: 1_000_000, inrMicros: 100_000_000 },
     });
     expect(item.supplierName).toBe('Proveedor desconocido');
   });

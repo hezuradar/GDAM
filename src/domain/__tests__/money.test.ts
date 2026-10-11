@@ -1,4 +1,4 @@
-import { convert, displayAmount, formatMoney, formatRate, parseAmount, parseRate } from '../money';
+import { convert, currencySymbol, displayAmount, formatMoney, formatRate, marketRates, parseAmount, parseRate, withUsdRate } from '../money';
 
 describe('parseAmount', () => {
   it.each([
@@ -36,7 +36,7 @@ describe('formatMoney', () => {
 });
 
 describe('convert', () => {
-  const rate = 1_080_000; // 1 EUR = 1.08 USD
+  const rate = { usdMicros: 1_080_000, inrMicros: 90_000_000 }; // 1 EUR = 1.08 USD = 90 INR
 
   it('returns the same amount for the same currency', () => {
     expect(convert(1000, 'EUR', 'EUR', rate)).toBe(1000);
@@ -51,12 +51,12 @@ describe('convert', () => {
   });
 
   it('throws on a non-positive rate when conversion is needed', () => {
-    expect(() => convert(100, 'USD', 'EUR', 0)).toThrow();
+    expect(() => convert(100, 'USD', 'EUR', { usdMicros: 0, inrMicros: 0 })).toThrow();
   });
 });
 
 describe('displayAmount', () => {
-  const rate = 1_100_000;
+  const rate = { usdMicros: 1_100_000, inrMicros: 100_000_000 };
   it('keeps the original amount and currency when no display currency is chosen', () => {
     expect(displayAmount(1100, 'USD', null, rate)).toEqual({ cents: 1100, currency: 'USD' });
   });
@@ -81,5 +81,40 @@ describe('rates', () => {
 
   it('formats a rate trimming trailing zeros', () => {
     expect(formatRate(1_080_000)).toBe('1,08');
+  });
+});
+
+describe('Indian rupee', () => {
+  const rates = { usdMicros: 1_100_000, inrMicros: 100_000_000 }; // 1 € = 1,10 US$ = 100 ₹
+
+  it('converts EUR and INR both ways', () => {
+    expect(convert(1000, 'EUR', 'INR', rates)).toBe(100_000);
+    expect(convert(100_000, 'INR', 'EUR', rates)).toBe(1000);
+  });
+
+  it('converts INR to USD through the euro', () => {
+    expect(convert(100_000, 'INR', 'USD', rates)).toBe(1100);
+    expect(convert(1100, 'USD', 'INR', rates)).toBe(100_000);
+  });
+
+  it('formats rupee amounts with the ₹ symbol', () => {
+    expect(formatMoney(123_450, 'INR')).toBe('1.234,50 ₹');
+    expect(currencySymbol('INR')).toBe('₹');
+  });
+
+  it('parses amounts written with rupee marks', () => {
+    expect(parseAmount('₹ 250')).toBe(25_000);
+    expect(parseAmount('Rs 1.500')).toBe(150_000);
+  });
+
+  it('builds market rates from the settings and overrides only the dollar rate', () => {
+    const market = marketRates({ fxRateMicros: 1_100_000, inrRateMicros: 100_000_000 });
+    expect(market).toEqual(rates);
+    expect(withUsdRate(market, 1_200_000)).toEqual({ usdMicros: 1_200_000, inrMicros: 100_000_000 });
+    expect(withUsdRate(market, null)).toBe(market);
+  });
+
+  it('throws when the rupee rate is missing', () => {
+    expect(() => convert(100, 'INR', 'EUR', { usdMicros: 1_100_000, inrMicros: 0 })).toThrow();
   });
 });

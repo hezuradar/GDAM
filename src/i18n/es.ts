@@ -41,7 +41,7 @@ export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
   otro: 'Otro',
 };
 
-export const CURRENCY_LABEL: Record<Currency, string> = { EUR: 'Euros (€)', USD: 'Dólares (US$)' };
+export const CURRENCY_LABEL: Record<Currency, string> = { EUR: 'Euros (€)', USD: 'Dólares (US$)', INR: 'Rupias (₹)' };
 
 export const SORT_LABEL: Record<OrderSort, string> = {
   fecha_desc: 'Más recientes',
