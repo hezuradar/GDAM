@@ -22,14 +22,22 @@ export interface ProductSource {
   readonly saleCurrency: Currency | null;
   /** Profit over cost in basis points (2500 = 25 %). */
   readonly marginBp: number | null;
+  /**
+   * Reference unit value for lines that came at 0 (replacements of defective parts) or without price.
+   * Only used for costing and sale pricing; the order keeps its own price.
+   */
+  readonly theoreticalCostCents: number | null;
+  readonly theoreticalCurrency: Currency | null;
 }
 
 export interface ProductCost extends ProductSource {
   readonly rateMicros: number;
   /** Shipping + customs per unit, allocated by line value (order currency). */
   readonly allocatedPerUnitCents: number | null;
-  /** Unit price + allocated shipping and customs (order currency). */
+  /** Unit price (or theoretical value) + allocated shipping and customs (order currency). */
   readonly landedUnitCents: number | null;
+  /** true when the cost comes from the theoretical value instead of the order price. */
+  readonly usesTheoreticalCost: boolean;
 }
 
 /**
@@ -44,14 +52,28 @@ export function computeProductCosts(rows: readonly ProductSource[], fallbackRate
   return rows.map((r) => {
     const rateMicros = r.fxRateMicros ?? fallbackRateMicros;
     const goods = goodsByOrder.get(r.orderId) ?? 0;
-    if (r.unitPriceCents === null || goods <= 0 || r.quantity <= 0) {
-      return { ...r, rateMicros, allocatedPerUnitCents: null, landedUnitCents: null };
+    const hasRealPrice = r.unitPriceCents !== null && r.unitPriceCents > 0;
+    const theoretical =
+      !hasRealPrice && r.theoreticalCostCents !== null
+        ? convert(r.theoreticalCostCents, r.theoreticalCurrency ?? r.currency, r.currency, rateMicros)
+        : null;
+    const baseUnitCents = hasRealPrice ? r.unitPriceCents : (theoretical ?? r.unitPriceCents);
+    if (baseUnitCents === null || r.quantity <= 0) {
+      return { ...r, rateMicros, allocatedPerUnitCents: null, landedUnitCents: null, usesTheoreticalCost: false };
     }
+    // Shipping and customs follow the real paid value: zero-price replacements take no share.
     const extra =
       convert(r.shippingCents, r.shippingCurrency, r.currency, rateMicros) +
       convert(r.customsCents, r.customsCurrency, r.currency, rateMicros);
-    const allocatedPerUnitCents = Math.round((extra * (r.quantity * r.unitPriceCents)) / goods / r.quantity);
-    return { ...r, rateMicros, allocatedPerUnitCents, landedUnitCents: r.unitPriceCents + allocatedPerUnitCents };
+    const lineValue = r.quantity * (r.unitPriceCents ?? 0);
+    const allocatedPerUnitCents = goods > 0 ? Math.round((extra * lineValue) / goods / r.quantity) : 0;
+    return {
+      ...r,
+      rateMicros,
+      allocatedPerUnitCents,
+      landedUnitCents: baseUnitCents + allocatedPerUnitCents,
+      usesTheoreticalCost: theoretical !== null,
+    };
   });
 }
 

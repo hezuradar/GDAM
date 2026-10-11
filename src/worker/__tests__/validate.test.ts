@@ -3,6 +3,7 @@ import {
   parseId,
   parseImportInput,
   parseLineInput,
+  parseLinePricingInput,
   parseOrderInput,
   parsePaymentInput,
   parseSettingsInput,
@@ -92,4 +93,25 @@ describe('parseSettingsInput', () => {
     });
   });
   it('requires a boolean fxAuto', () => expectBadRequest(() => parseSettingsInput({ defaultCurrency: 'USD', fxAuto: 'si' }), 'fxAuto'));
+});
+
+describe('parseLinePricingInput', () => {
+  const base = { salePriceCents: null, saleCurrency: null, marginBp: 2500 };
+  it('accepts a theoretical value with its currency', () => {
+    expect(parseLinePricingInput({ ...base, theoreticalCostCents: 20000, theoreticalCurrency: 'EUR' })).toEqual({
+      ...base,
+      theoreticalCostCents: 20000,
+      theoreticalCurrency: 'EUR',
+    });
+  });
+  it('treats a missing theoretical value as none', () => {
+    expect(parseLinePricingInput(base)).toEqual({ ...base, theoreticalCostCents: null, theoreticalCurrency: null });
+  });
+  it('drops the currency when there is no theoretical value', () => {
+    expect(parseLinePricingInput({ ...base, theoreticalCostCents: null, theoreticalCurrency: 'USD' }).theoreticalCurrency).toBeNull();
+  });
+  it('requires a currency with a theoretical value', () =>
+    expectBadRequest(() => parseLinePricingInput({ ...base, theoreticalCostCents: 100, theoreticalCurrency: null }), 'theoreticalCurrency'));
+  it('rejects a negative theoretical value', () =>
+    expectBadRequest(() => parseLinePricingInput({ ...base, theoreticalCostCents: -1, theoreticalCurrency: 'EUR' }), 'theoreticalCostCents'));
 });

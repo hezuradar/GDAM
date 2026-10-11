@@ -42,11 +42,21 @@ function ProductCard({ product, currency, onPress }: { product: ProductCost; cur
           #{product.orderId} · {formatDate(product.orderDate)}
         </IconText>
       </View>
-      {product.unitPriceCents === null || info.landedUnitCents === null ? (
-        <IconText icon="pricetag-outline">Precio pendiente: añádelo en el pedido para calcular el coste</IconText>
+      {product.landedUnitCents === null || info.landedUnitCents === null ? (
+        <IconText icon="pricetag-outline">Precio pendiente: añádelo en el pedido o toca para poner un valor teórico</IconText>
       ) : (
         <>
-          <InfoRow icon="pricetag-outline" label="Precio por unidad" value={money(product.unitPriceCents)} />
+          <InfoRow
+            icon="pricetag-outline"
+            label={product.usesTheoreticalCost ? 'Valor teórico por unidad' : 'Precio por unidad'}
+            value={money(product.landedUnitCents - (product.allocatedPerUnitCents ?? 0))}
+          />
+          {product.usesTheoreticalCost ? (
+            <IconText icon="refresh-circle-outline">Reposición: en el pedido figura a {money(product.unitPriceCents ?? 0)}</IconText>
+          ) : null}
+          {product.unitPriceCents === 0 && !product.usesTheoreticalCost ? (
+            <IconText icon="alert-circle-outline">Pieza a 0 (reposición): toca para poner un valor teórico</IconText>
+          ) : null}
           <InfoRow icon="airplane-outline" label="Envío + aduanas por unidad" value={`+ ${money(product.allocatedPerUnitCents ?? 0)}`} />
           <InfoRow icon="calculator-outline" label="Coste unitario total" value={formatMoney(info.landedUnitCents, currency)} isStrong />
           <View style={styles.divider} />

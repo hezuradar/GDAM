@@ -136,6 +136,8 @@ export interface LinePricingInput {
   readonly salePriceCents: number | null;
   readonly saleCurrency: Currency | null;
   readonly marginBp: number | null;
+  readonly theoreticalCostCents: number | null;
+  readonly theoreticalCurrency: Currency | null;
 }
 
 /** Either a sale price (with its currency) or a margin over cost; both null clears the pricing. */
@@ -145,7 +147,19 @@ export function parseLinePricingInput(raw: unknown): LinePricingInput {
   const saleCurrency = body.saleCurrency === null || body.saleCurrency === undefined ? null : oneOf<Currency>(body, 'saleCurrency', CURRENCIES);
   const marginBp = nullableInteger(body, 'marginBp', -10_000, 10_000_000);
   if (salePriceCents !== null && saleCurrency === null) throw badRequest('«saleCurrency» es obligatorio con un precio de venta');
-  return { salePriceCents, saleCurrency: salePriceCents === null ? null : saleCurrency, marginBp };
+  const theoreticalCostCents = nullableInteger(body, 'theoreticalCostCents', 0, MAX_CENTS);
+  const theoreticalCurrency =
+    body.theoreticalCurrency === null || body.theoreticalCurrency === undefined ? null : oneOf<Currency>(body, 'theoreticalCurrency', CURRENCIES);
+  if (theoreticalCostCents !== null && theoreticalCurrency === null) {
+    throw badRequest('«theoreticalCurrency» es obligatorio con un valor teórico');
+  }
+  return {
+    salePriceCents,
+    saleCurrency: salePriceCents === null ? null : saleCurrency,
+    marginBp,
+    theoreticalCostCents,
+    theoreticalCurrency: theoreticalCostCents === null ? null : theoreticalCurrency,
+  };
 }
 
 export function parsePaymentInput(raw: unknown): PaymentInput {

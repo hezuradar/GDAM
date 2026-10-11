@@ -90,7 +90,13 @@ export const importLines = (orderId: number, lines: readonly LineInput[], replac
 export const listProducts = () => apiRequest<{ products: ProductSource[]; settings: AppSettings }>('GET', '/products');
 export const saveLinePricing = (
   lineId: number,
-  pricing: { salePriceCents: number | null; saleCurrency: Currency | null; marginBp: number | null },
+  pricing: {
+    salePriceCents: number | null;
+    saleCurrency: Currency | null;
+    marginBp: number | null;
+    theoreticalCostCents: number | null;
+    theoreticalCurrency: Currency | null;
+  },
 ) => apiRequest('PATCH', `/lines/${lineId}/pricing`, pricing);
 
 // Payments

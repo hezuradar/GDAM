@@ -43,12 +43,22 @@ export default function ProductPricingScreen() {
   const [currency, setCurrency] = useState<Currency>('EUR');
   const [saleText, setSaleText] = useState('');
   const [marginText, setMarginText] = useState('');
+  const [theoreticalText, setTheoreticalText] = useState('');
   const [edited, setEdited] = useState<EditedField>(null);
+  const [isTheoreticalEdited, setTheoreticalEdited] = useState(false);
   const [isSaving, setSaving] = useState(false);
   const seeded = useRef(false);
 
   const info = product ? productSaleInfo(product, currency) : null;
-  const landed = info?.landedUnitCents ?? null;
+  // Zero-price replacements (or lines without price) are costed with a theoretical value.
+  const needsTheoretical = !!product && (product.unitPriceCents === null || product.unitPriceCents === 0);
+  const theoreticalCents = theoreticalText.trim() === '' ? null : parseAmount(theoreticalText);
+  const allocatedDisplay = product ? convert(product.allocatedPerUnitCents ?? 0, product.currency, currency, product.rateMicros) : 0;
+  const landed = needsTheoretical
+    ? theoreticalCents === null
+      ? null
+      : theoreticalCents + allocatedDisplay
+    : (info?.landedUnitCents ?? null);
 
   // Seed the fields once from what is stored (later focus reloads must not discard typing).
   useEffect(() => {
@@ -57,6 +67,10 @@ export default function ProductPricingScreen() {
     const initial = productSaleInfo(product, 'EUR');
     setSaleText(initial.salePriceCents === null ? '' : centsToInput(initial.salePriceCents));
     setMarginText(marginToInput(initial.marginBp));
+    if (product.theoreticalCostCents !== null) {
+      const from = product.theoreticalCurrency ?? product.currency;
+      setTheoreticalText(centsToInput(convert(product.theoreticalCostCents, from, 'EUR', product.rateMicros)));
+    }
   }, [product]);
 
   if (error) return <ErrorView message={error} onRetry={reload} />;
@@ -67,8 +81,29 @@ export default function ProductPricingScreen() {
   const changeCurrency = (next: Currency) => {
     const sale = parseAmount(saleText);
     if (sale !== null) setSaleText(centsToInput(convert(sale, currency, next, product.rateMicros)));
+    if (theoreticalCents !== null) setTheoreticalText(centsToInput(convert(theoreticalCents, currency, next, product.rateMicros)));
     setCurrency(next);
   };
+  const onTheoreticalChange = (text: string) => {
+    setTheoreticalText(text);
+    setTheoreticalEdited(true);
+    const value = text.trim() === '' ? null : parseAmount(text);
+    const nextLanded = value === null ? null : value + allocatedDisplay;
+    if (nextLanded === null) return;
+    // Keep whichever field the user drives and recompute the other one.
+    if (edited === 'sale') {
+      const sale = parseAmount(saleText);
+      setMarginText(marginToInput(sale === null ? null : marginFromSalePrice(nextLanded, sale)));
+    } else {
+      const margin = parseMarginBp(marginText);
+      if (margin !== null) setSaleText(centsToInput(salePriceFromMargin(nextLanded, margin)));
+    }
+  };
+  // The theoretical value only feeds costing; the order line keeps its own price (0).
+  const theoreticalPricing = () =>
+    needsTheoretical
+      ? { theoreticalCostCents: theoreticalCents, theoreticalCurrency: theoreticalCents === null ? null : currency }
+      : { theoreticalCostCents: product.theoreticalCostCents, theoreticalCurrency: product.theoreticalCurrency };
   const onSaleChange = (text: string) => {
     setSaleText(text);
     setEdited('sale');
@@ -97,15 +132,26 @@ export default function ProductPricingScreen() {
   };
 
   const handleSave = () => {
+    const invalidTheoretical = needsTheoretical && theoreticalText.trim() !== '' && theoreticalCents === null;
+    if (!announceErrors({ theoretical: invalidTheoretical ? 'Valor teórico no válido' : undefined })) return;
+    const theoretical = theoreticalPricing();
     if (edited === 'margin') {
       const marginBp = parseMarginBp(marginText);
       if (!announceErrors({ margin: marginBp === null ? 'Porcentaje no válido (ej. 25)' : undefined })) return;
-      void save({ salePriceCents: null, saleCurrency: null, marginBp }, 'Beneficio guardado');
+      void save({ salePriceCents: null, saleCurrency: null, marginBp, ...theoretical }, 'Beneficio guardado');
       return;
     }
-    const sale = parseAmount(saleText);
-    if (!announceErrors({ sale: sale === null ? 'Precio de venta no válido' : undefined })) return;
-    void save({ salePriceCents: sale, saleCurrency: currency, marginBp: null }, 'Precio de venta guardado');
+    if (edited === 'sale') {
+      const sale = parseAmount(saleText);
+      if (!announceErrors({ sale: sale === null ? 'Precio de venta no válido' : undefined })) return;
+      void save({ salePriceCents: sale, saleCurrency: currency, marginBp: null, ...theoretical }, 'Precio de venta guardado');
+      return;
+    }
+    // Only the theoretical value changed: keep the stored sale pricing as it is.
+    void save(
+      { salePriceCents: product.salePriceCents, saleCurrency: product.saleCurrency, marginBp: product.marginBp, ...theoretical },
+      'Valor teórico guardado',
+    );
   };
 
   const title = [formatQuantity(product.quantity), '×', product.pieceType, product.measurements].filter(Boolean).join(' ');
@@ -128,11 +174,32 @@ export default function ProductPricingScreen() {
       />
 
       <SectionHeader title="Coste por unidad" icon="calculator-outline" />
-      {landed === null || product.unitPriceCents === null ? (
-        <Text style={styles.note}>Este producto aún no tiene precio. Añádelo en el pedido para calcular el coste.</Text>
+      {needsTheoretical ? (
+        <Card>
+          <InfoRow icon="receipt-outline" label="Precio en el pedido" value={product.unitPriceCents === null ? 'Sin precio' : money(0)} />
+          <TextField
+            label={`Valor teórico por unidad (${currency === 'EUR' ? '€' : 'US$'})`}
+            value={theoreticalText}
+            onChangeText={onTheoreticalChange}
+            keyboardType="decimal-pad"
+            placeholder="0,00"
+            hint="Para piezas de reposición: solo sirve para calcular la venta; el pedido no cambia"
+          />
+        </Card>
+      ) : null}
+      {landed === null ? (
+        <Text style={styles.note}>
+          {needsTheoretical
+            ? 'Pon un valor teórico para calcular el coste y el precio de venta.'
+            : 'Este producto aún no tiene precio. Añádelo en el pedido para calcular el coste.'}
+        </Text>
       ) : (
         <Card>
-          <InfoRow icon="pricetag-outline" label="Precio por unidad" value={money(product.unitPriceCents)} />
+          <InfoRow
+            icon="pricetag-outline"
+            label={needsTheoretical ? 'Valor teórico por unidad' : 'Precio por unidad'}
+            value={needsTheoretical ? formatMoney(theoreticalCents ?? 0, currency) : money(product.unitPriceCents ?? 0)}
+          />
           <InfoRow icon="airplane-outline" label="Envío + aduanas (proporcional)" value={`+ ${money(product.allocatedPerUnitCents ?? 0)}`} />
           <InfoRow icon="calculator-outline" label="Coste unitario total" value={formatMoney(landed, currency)} isStrong />
         </Card>
@@ -166,13 +233,18 @@ export default function ProductPricingScreen() {
         ) : null}
       </Card>
 
-      <Button label={isSaving ? 'Guardando…' : 'Guardar'} icon="checkmark" onPress={handleSave} isDisabled={isSaving || edited === null} />
+      <Button label={isSaving ? 'Guardando…' : 'Guardar'} icon="checkmark" onPress={handleSave} isDisabled={isSaving || (edited === null && !isTheoreticalEdited)} />
       {info?.salePriceCents !== null || product.marginBp !== null ? (
         <Button
           variant="secondary"
           label="Quitar precio de venta"
           icon="close-circle-outline"
-          onPress={() => void save({ salePriceCents: null, saleCurrency: null, marginBp: null }, 'Precio de venta quitado')}
+          onPress={() =>
+            void save(
+              { salePriceCents: null, saleCurrency: null, marginBp: null, ...theoreticalPricing() },
+              'Precio de venta quitado',
+            )
+          }
           isDisabled={isSaving}
         />
       ) : null}

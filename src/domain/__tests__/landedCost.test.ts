@@ -27,7 +27,38 @@ const row = (overrides: Partial<ProductSource>): ProductSource => ({
   salePriceCents: null,
   saleCurrency: null,
   marginBp: null,
+  theoreticalCostCents: null,
+  theoreticalCurrency: null,
   ...overrides,
+});
+
+describe('theoretical cost for zero-price replacements', () => {
+  it('uses the theoretical value (converted) when the order price is 0, without taking shipping', () => {
+    const [paid, replacement] = computeProductCosts(
+      [
+        row({ lineId: 1, unitPriceCents: 100, shippingCents: 500 }),
+        row({ lineId: 2, unitPriceCents: 0, shippingCents: 500, theoreticalCostCents: 200, theoreticalCurrency: 'EUR' }),
+      ],
+      RATE,
+    );
+    expect(paid).toMatchObject({ allocatedPerUnitCents: 50, landedUnitCents: 150, usesTheoreticalCost: false });
+    expect(replacement).toMatchObject({ unitPriceCents: 0, allocatedPerUnitCents: 0, landedUnitCents: 220, usesTheoreticalCost: true });
+  });
+
+  it('also covers lines with a pending price', () => {
+    const [line] = computeProductCosts([row({ unitPriceCents: null, theoreticalCostCents: 300, theoreticalCurrency: 'USD' })], RATE);
+    expect(line).toMatchObject({ landedUnitCents: 300, usesTheoreticalCost: true });
+  });
+
+  it('ignores the theoretical value when the line has a real price', () => {
+    const [line] = computeProductCosts([row({ unitPriceCents: 100, theoreticalCostCents: 999, theoreticalCurrency: 'USD' })], RATE);
+    expect(line).toMatchObject({ landedUnitCents: 100, usesTheoreticalCost: false });
+  });
+
+  it('treats a zero-price line without theoretical value as zero cost', () => {
+    const [line] = computeProductCosts([row({ unitPriceCents: 0 })], RATE);
+    expect(line).toMatchObject({ landedUnitCents: 0, usesTheoreticalCost: false });
+  });
 });
 
 describe('computeProductCosts', () => {
