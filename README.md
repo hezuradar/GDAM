@@ -64,20 +64,27 @@ Los importes se guardan en céntimos enteros y el cambio como «1 € = X US$» 
 
 ## Seguridad
 
-- **API cerrada por defecto.** Solo responde cuando **Cloudflare Access** está activado. El Worker verifica la firma del
-  token de Access (RS256, audiencia, emisor y caducidad) y que el correo esté en el secreto `ALLOWED_EMAILS`.
+- **Inicio de sesión con contraseña**, gratis y sin servicios externos.
+  - La contraseña se guarda en el secreto del Worker `APP_PASSWORD`, nunca en el código.
+  - Al entrar, el servidor crea una cookie de sesión firmada (HMAC-SHA256, `HttpOnly`, `Secure`, `SameSite=Strict`)
+    que dura 30 días.
+  - Cambiar la contraseña cierra todas las sesiones.
+- **Protección contra ataques por fuerza bruta:** tras 10 fallos, esa conexión espera 15 minutos.
+- **API cerrada por defecto:** sin `APP_PASSWORD` (o si tiene menos de 10 caracteres), no da acceso a ningún dato.
 - **Consultas parametrizadas** y validación de todos los datos en el servidor.
 - **Protección CSRF:** las modificaciones solo se aceptan en JSON y desde el mismo origen.
 
-### Activar el acceso (una sola vez)
+### Poner o cambiar la contraseña
 
-1. En el panel de Cloudflare: **Workers & Pages → compras-gdam → Settings → Domains & Routes**. En la fila
-   **workers.dev**, activa **Cloudflare Access**. Si te pide crear la organización de Zero Trust, elige un nombre de
-   equipo y el plan **Free**.
-2. En **Zero Trust → Access → Applications**, abre la aplicación creada. En **Policies**, deja **Allow** con
-   *Include → Emails* `hezuradar@gmail.com` e `iotegi@gmail.com`.
-3. Copia el **Application Audience (AUD) Tag** y el dominio del equipo (`<equipo>.cloudflareaccess.com`) en
-   `ACCESS_AUD` y `ACCESS_TEAM_DOMAIN` de `wrangler.jsonc`, y publica con `npm run deploy`.
+En la carpeta del proyecto, ejecuta el comando y escribe la contraseña cuando la pida (mínimo 10 caracteres; no se
+muestra en pantalla):
+
+```bash
+npx wrangler secret put APP_PASSWORD
+```
+
+También se puede hacer en el panel de Cloudflare: **Workers & Pages → compras-gdam → Settings → Variables and secrets →
+Add**, con tipo **Secret** y nombre `APP_PASSWORD`.
 
 ## Desarrollo
 
