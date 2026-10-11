@@ -18,6 +18,7 @@ function pendingSummary(items: readonly OrderListItem[]): string {
     const cents = items.filter((i) => i.currency === currency).reduce((sum, i) => sum + i.pendingCents, 0);
     return cents > 0 ? formatMoney(cents, currency) : null;
   }).filter(Boolean);
+  if (items.length === 0) return 'ninguno coincide';
   return parts.length > 0 ? `Pendiente de pago: ${parts.join(' + ')}` : 'Todo pagado';
 }
 

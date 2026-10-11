@@ -6,6 +6,7 @@ import { confirmDestructive, showError } from '@/components/ui/alerts';
 import { Button, ButtonRow, IconButton } from '@/components/ui/Button';
 import { Card, EmptyState, ErrorView, FormScroll, LoadingView, SectionHeader } from '@/components/ui/Layout';
 import { deleteSupplier, getSupplier } from '@/api/data';
+import { plural } from '@/domain/exportText';
 import { filterOrders } from '@/domain/orderFilters';
 import { useLoader } from '@/hooks/useLoader';
 import { loadOrderList } from '@/hooks/useOrderList';
@@ -31,7 +32,7 @@ export default function SupplierDetailScreen() {
   const handleDelete = () => {
     // The server also refuses (409) if orders were added from another device meanwhile.
     if (orders.length > 0) {
-      showError('No se puede eliminar', new Error(`Este proveedor tiene ${orders.length} pedidos. Elimínalos primero.`));
+      showError('No se puede eliminar', new Error(`Este proveedor tiene ${plural(orders.length, 'pedido', 'pedidos')}. Elimínalos primero.`));
       return;
     }
     confirmDestructive({

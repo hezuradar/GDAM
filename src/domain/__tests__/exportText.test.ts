@@ -1,4 +1,12 @@
-import { orderSummaryText } from '../exportText';
+import { orderSummaryText, plural } from '../exportText';
+
+describe('plural', () => {
+  it('uses the singular only for exactly one', () => {
+    expect(plural(1, 'pedido', 'pedidos')).toBe('1 pedido');
+    expect(plural(0, 'pedido', 'pedidos')).toBe('0 pedidos');
+    expect(plural(3, 'línea', 'líneas')).toBe('3 líneas');
+  });
+});
 
 describe('orderSummaryText', () => {
   it('builds a WhatsApp-friendly summary', () => {

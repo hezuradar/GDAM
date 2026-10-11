@@ -9,7 +9,7 @@ import { Button, ButtonRow, IconButton } from '@/components/ui/Button';
 import { ChipGroup } from '@/components/ui/ChipGroup';
 import { Card, EmptyState, ErrorView, FormScroll, InfoRow, LoadingView, PressableRow, SectionHeader } from '@/components/ui/Layout';
 import { deleteOrder, updateOrderStatus } from '@/api/data';
-import { formatDate, orderSummaryText } from '@/domain/exportText';
+import { formatDate, orderSummaryText, plural } from '@/domain/exportText';
 import { ORDER_STATUSES, type OrderStatus } from '@/domain/types';
 import { useOrderDetail, type OrderDetail } from '@/hooks/useOrderDetail';
 import { ORDER_STATUS_ICON, ORDER_STATUS_LABEL } from '@/i18n/es';
@@ -73,7 +73,7 @@ export default function OrderDetailScreen() {
   const handleDelete = () =>
     confirmDestructive({
       title: `¿Eliminar el pedido #${order.id}?`,
-      message: `Se borrarán también ${lines.length} líneas y ${payments.length} pagos. No se puede deshacer.`,
+      message: `Se borrarán también ${plural(lines.length, 'línea', 'líneas')} y ${plural(payments.length, 'pago', 'pagos')}. No se puede deshacer.`,
       confirmLabel: 'Eliminar pedido',
       onConfirm: () => {
         deleteOrder(order.id)

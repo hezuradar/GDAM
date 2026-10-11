@@ -1,4 +1,5 @@
 import type { FxQuote } from '../domain/fxRate';
+import { plural } from '../domain/exportText';
 import { convert } from '../domain/money';
 import { CURRENCIES, type Currency, type Order, type OrderLine, type OrderStatus, type Payment, type Supplier } from '../domain/types';
 import { HttpError, notFound } from './http';
@@ -90,7 +91,7 @@ export async function countSupplierOrders(db: D1Database, id: number): Promise<n
 
 export async function deleteSupplier(db: D1Database, id: number): Promise<void> {
   const count = await countSupplierOrders(db, id);
-  if (count > 0) throw new HttpError(409, `Este proveedor tiene ${count} pedidos. Elimínalos primero.`);
+  if (count > 0) throw new HttpError(409, `Este proveedor tiene ${plural(count, 'pedido', 'pedidos')}. Elimínalos primero.`);
   await requireChanged(await db.prepare('DELETE FROM suppliers WHERE id = ?').bind(id).run(), 'Proveedor');
 }
 

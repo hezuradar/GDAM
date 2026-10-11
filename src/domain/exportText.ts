@@ -21,6 +21,11 @@ export function formatDate(isoDate: string): string {
   return day && month && year ? `${day}/${month}/${year}` : isoDate;
 }
 
+/** "1 pedido" / "3 pedidos". */
+export function plural(count: number, singular: string, pluralForm: string): string {
+  return `${count} ${count === 1 ? singular : pluralForm}`;
+}
+
 export function formatQuantity(quantity: number): string {
   return String(quantity).replace('.', ',');
 }
