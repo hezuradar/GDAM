@@ -272,6 +272,7 @@ interface ProductRow {
   shipping_cents: number; shipping_currency: Currency; customs_cents: number; customs_currency: Currency;
   fx_rate_micros: number | null; sale_price_cents: number | null; sale_currency: Currency | null; margin_bp: number | null;
   theoretical_cost_cents: number | null; theoretical_currency: Currency | null;
+  handling_cost_cents: number | null; handling_currency: Currency | null;
 }
 
 /** Every line of every non-cancelled order, newest first, with what is needed for landed cost. */
@@ -281,7 +282,7 @@ export async function listProducts(db: D1Database) {
     `SELECT l.id AS line_id, o.id AS order_id, o.order_date, s.name AS supplier_name, l.quantity, l.piece_type,
             l.measurements, l.unit_price_cents, o.currency, o.shipping_cents, o.shipping_currency, o.customs_cents,
             o.customs_currency, o.fx_rate_micros, l.sale_price_cents, l.sale_currency, l.margin_bp,
-            l.theoretical_cost_cents, l.theoretical_currency
+            l.theoretical_cost_cents, l.theoretical_currency, l.handling_cost_cents, l.handling_currency
      FROM order_lines l
      JOIN orders o ON o.id = l.order_id
      LEFT JOIN suppliers s ON s.id = o.supplier_id
@@ -295,6 +296,7 @@ export async function listProducts(db: D1Database) {
     customsCents: r.customs_cents, customsCurrency: r.customs_currency, fxRateMicros: r.fx_rate_micros,
     salePriceCents: r.sale_price_cents, saleCurrency: r.sale_currency, marginBp: r.margin_bp,
     theoreticalCostCents: r.theoretical_cost_cents, theoreticalCurrency: r.theoretical_currency,
+    handlingCostCents: r.handling_cost_cents, handlingCurrency: r.handling_currency,
   }));
 }
 
@@ -302,9 +304,12 @@ export async function updateLinePricing(db: D1Database, id: number, input: LineP
   const result = await db
     .prepare(
       `UPDATE order_lines SET sale_price_cents = ?, sale_currency = ?, margin_bp = ?,
-         theoretical_cost_cents = ?, theoretical_currency = ? WHERE id = ?`,
+         theoretical_cost_cents = ?, theoretical_currency = ?, handling_cost_cents = ?, handling_currency = ? WHERE id = ?`,
     )
-    .bind(input.salePriceCents, input.saleCurrency, input.marginBp, input.theoreticalCostCents, input.theoreticalCurrency, id)
+    .bind(
+      input.salePriceCents, input.saleCurrency, input.marginBp, input.theoreticalCostCents, input.theoreticalCurrency,
+      input.handlingCostCents, input.handlingCurrency, id,
+    )
     .run();
   await requireChanged(result, 'Línea');
 }

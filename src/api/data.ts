@@ -102,6 +102,8 @@ export const saveLinePricing = (
     marginBp: number | null;
     theoreticalCostCents: number | null;
     theoreticalCurrency: Currency | null;
+    handlingCostCents: number | null;
+    handlingCurrency: Currency | null;
   },
 ) => apiRequest('PATCH', `/lines/${lineId}/pricing`, pricing);
 

@@ -103,10 +103,18 @@ describe('parseLinePricingInput', () => {
       ...base,
       theoreticalCostCents: 20000,
       theoreticalCurrency: 'EUR',
+      handlingCostCents: null,
+      handlingCurrency: null,
     });
   });
   it('treats a missing theoretical value as none', () => {
-    expect(parseLinePricingInput(base)).toEqual({ ...base, theoreticalCostCents: null, theoreticalCurrency: null });
+    expect(parseLinePricingInput(base)).toEqual({
+      ...base,
+      theoreticalCostCents: null,
+      theoreticalCurrency: null,
+      handlingCostCents: null,
+      handlingCurrency: null,
+    });
   });
   it('drops the currency when there is no theoretical value', () => {
     expect(parseLinePricingInput({ ...base, theoreticalCostCents: null, theoreticalCurrency: 'USD' }).theoreticalCurrency).toBeNull();
@@ -127,4 +135,20 @@ describe('parseLinePricesInput', () => {
     expectBadRequest(() => parseLinePricesInput({ prices: [{ lineId: 1, unitPriceCents: -1 }] }), 'unitPriceCents'));
   it('rejects repeated lines', () =>
     expectBadRequest(() => parseLinePricesInput({ prices: [{ lineId: 1, unitPriceCents: 1 }, { lineId: 1, unitPriceCents: 2 }] }), 'repetidas'));
+});
+
+describe('parseLinePricingInput handling cost', () => {
+  const base = { salePriceCents: 500, saleCurrency: 'EUR', marginBp: null };
+  it('accepts a handling cost with its currency', () => {
+    expect(parseLinePricingInput({ ...base, handlingCostCents: 75, handlingCurrency: 'INR' })).toMatchObject({
+      handlingCostCents: 75,
+      handlingCurrency: 'INR',
+    });
+  });
+  it('requires a currency with a handling cost', () =>
+    expectBadRequest(() => parseLinePricingInput({ ...base, handlingCostCents: 75 }), 'handlingCurrency'));
+  it('rejects a negative handling cost', () =>
+    expectBadRequest(() => parseLinePricingInput({ ...base, handlingCostCents: -5, handlingCurrency: 'EUR' }), 'handlingCostCents'));
+  it('still requires a currency with a sale price', () =>
+    expectBadRequest(() => parseLinePricingInput({ ...base, saleCurrency: null }), 'saleCurrency'));
 });

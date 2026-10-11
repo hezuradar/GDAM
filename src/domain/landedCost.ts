@@ -28,13 +28,18 @@ export interface ProductSource {
    */
   readonly theoreticalCostCents: number | null;
   readonly theoreticalCurrency: Currency | null;
+  /** Handling cost per unit before selling (cleaning, cutting, packing…). Never part of the order. */
+  readonly handlingCostCents: number | null;
+  readonly handlingCurrency: Currency | null;
 }
 
 export interface ProductCost extends ProductSource {
   readonly rates: FxRates;
   /** Shipping + customs per unit, allocated by line value (order currency). */
   readonly allocatedPerUnitCents: number | null;
-  /** Unit price (or theoretical value) + allocated shipping and customs (order currency). */
+  /** Handling cost per unit in the order currency (0 when none). */
+  readonly handlingPerUnitCents: number;
+  /** Unit price (or theoretical value) + allocated shipping and customs + handling (order currency). */
   readonly landedUnitCents: number | null;
   /** true when the cost comes from the theoretical value instead of the order price. */
   readonly usesTheoreticalCost: boolean;
@@ -72,40 +77,63 @@ export function computeProductCosts(rows: readonly ProductSource[], marketRates:
   });
   return rows.map((r, i) => {
     const { rates, baseUnitCents, usesTheoreticalCost } = bases[i];
+    // Handling never takes part in the shipping split: it is a cost of this product only.
+    const handlingPerUnitCents =
+      r.handlingCostCents === null ? 0 : convert(r.handlingCostCents, r.handlingCurrency ?? r.currency, r.currency, rates);
     if (baseUnitCents === null || r.quantity <= 0) {
-      return { ...r, rates, allocatedPerUnitCents: null, landedUnitCents: null, usesTheoreticalCost: false };
+      return { ...r, rates, allocatedPerUnitCents: null, handlingPerUnitCents, landedUnitCents: null, usesTheoreticalCost: false };
     }
     const extra =
       convert(r.shippingCents, r.shippingCurrency, r.currency, rates) +
       convert(r.customsCents, r.customsCurrency, r.currency, rates);
     const orderValue = valueByOrder.get(r.orderId) ?? 0;
     const allocatedPerUnitCents = orderValue > 0 ? Math.round((extra * r.quantity * baseUnitCents) / orderValue / r.quantity) : 0;
-    return { ...r, rates, allocatedPerUnitCents, landedUnitCents: baseUnitCents + allocatedPerUnitCents, usesTheoreticalCost };
+    return {
+      ...r,
+      rates,
+      allocatedPerUnitCents,
+      handlingPerUnitCents,
+      landedUnitCents: baseUnitCents + allocatedPerUnitCents + handlingPerUnitCents,
+      usesTheoreticalCost,
+    };
   });
 }
 
+/** Values being typed on the product screen, in `currency`; a missing key keeps the stored value. */
+export interface CostOverrides {
+  readonly theoreticalCents?: number | null;
+  readonly handlingCents?: number | null;
+  readonly currency: Currency;
+}
+
+function applyOverrides(row: ProductSource, overrides: CostOverrides): ProductSource {
+  const { theoreticalCents, handlingCents, currency } = overrides;
+  return {
+    ...row,
+    ...(theoreticalCents !== undefined
+      ? { theoreticalCostCents: theoreticalCents, theoreticalCurrency: theoreticalCents === null ? null : currency }
+      : {}),
+    ...(handlingCents !== undefined ? { handlingCostCents: handlingCents, handlingCurrency: handlingCents === null ? null : currency } : {}),
+  };
+}
+
 /**
- * Landed unit cost (display currency) of one line while its theoretical value is being typed:
- * the whole order is recomputed, because that value also changes how shipping is shared.
- * Null when the line is not among the rows or its cost is still unknown.
+ * Landed unit cost (display currency) of one line while its theoretical value or handling cost is
+ * being typed: the whole order is recomputed, because a theoretical value also changes how shipping
+ * is shared. Null when the line is not among the rows or its cost is still unknown.
  */
 export function previewLandedCost(
   rows: readonly ProductSource[],
   marketRates: FxRates,
   lineId: number,
-  theoreticalCents: number | null,
-  theoreticalCurrency: Currency,
+  overrides: CostOverrides,
   display: Currency,
 ): number | null {
   const target = rows.find((r) => r.lineId === lineId);
   if (!target) return null;
   const orderRows = rows
     .filter((r) => r.orderId === target.orderId)
-    .map((r) =>
-      r.lineId === lineId
-        ? { ...r, theoreticalCostCents: theoreticalCents, theoreticalCurrency: theoreticalCents === null ? null : theoreticalCurrency }
-        : r,
-    );
+    .map((r) => (r.lineId === lineId ? applyOverrides(r, overrides) : r));
   const line = computeProductCosts(orderRows, marketRates).find((p) => p.lineId === lineId);
   if (!line || line.landedUnitCents === null) return null;
   return convert(line.landedUnitCents, line.currency, display, line.rates);

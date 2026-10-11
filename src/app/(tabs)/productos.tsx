@@ -50,7 +50,7 @@ function ProductCard({ product, currency, onPress }: { product: ProductCost; cur
           <InfoRow
             icon="pricetag-outline"
             label={product.usesTheoreticalCost ? 'Valor teórico por unidad' : 'Precio por unidad'}
-            value={money(product.landedUnitCents - (product.allocatedPerUnitCents ?? 0))}
+            value={money(product.landedUnitCents - (product.allocatedPerUnitCents ?? 0) - product.handlingPerUnitCents)}
           />
           {product.usesTheoreticalCost ? (
             <IconText icon="refresh-circle-outline">Reposición: en el pedido figura a {money(product.unitPriceCents ?? 0)}</IconText>
@@ -59,6 +59,9 @@ function ProductCard({ product, currency, onPress }: { product: ProductCost; cur
             <IconText icon="alert-circle-outline">Pieza a 0 (reposición): toca para poner un valor teórico</IconText>
           ) : null}
           <InfoRow icon="airplane-outline" label="Envío + aduanas por unidad" value={`+ ${money(product.allocatedPerUnitCents ?? 0)}`} />
+          {product.handlingPerUnitCents > 0 ? (
+            <InfoRow icon="construct-outline" label="Manipulación por unidad" value={`+ ${money(product.handlingPerUnitCents)}`} />
+          ) : null}
           <InfoRow icon="calculator-outline" label="Coste unitario total" value={formatMoney(info.landedUnitCents, currency)} isStrong />
           <View style={styles.divider} />
           {info.salePriceCents === null ? (

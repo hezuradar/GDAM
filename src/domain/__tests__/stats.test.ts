@@ -113,6 +113,8 @@ const product = (overrides: Partial<ProductSource>): ProductSource => ({
   marginBp: null,
   theoreticalCostCents: null,
   theoreticalCurrency: null,
+  handlingCostCents: null,
+  handlingCurrency: null,
   ...overrides,
 });
 
@@ -163,5 +165,15 @@ describe('profitStats', () => {
 
   it('has no average margin without products for sale', () => {
     expect(profitStats([], 'EUR').marginBp).toBeNull();
+  });
+});
+
+describe('profitStats with handling cost', () => {
+  it('includes the handling cost in the cost and profit', () => {
+    const products = computeProductCosts(
+      [product({ quantity: 10, unitPriceCents: 100, handlingCostCents: 50, handlingCurrency: 'EUR', salePriceCents: 200, saleCurrency: 'EUR' })],
+      RATES,
+    );
+    expect(profitStats(products, 'EUR')).toMatchObject({ costCents: 1500, saleCents: 2000, profitCents: 500 });
   });
 });

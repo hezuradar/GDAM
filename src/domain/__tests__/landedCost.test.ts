@@ -30,6 +30,8 @@ const row = (overrides: Partial<ProductSource>): ProductSource => ({
   marginBp: null,
   theoreticalCostCents: null,
   theoreticalCurrency: null,
+  handlingCostCents: null,
+  handlingCurrency: null,
   ...overrides,
 });
 
@@ -61,10 +63,10 @@ describe('theoretical cost for zero-price replacements', () => {
       row({ lineId: 1, unitPriceCents: 100, shippingCents: 500 }),
       row({ lineId: 2, unitPriceCents: 0, shippingCents: 500 }),
     ];
-    expect(previewLandedCost(rows, RATE, 2, 220, 'USD', 'USD')).toBe(254);
-    expect(previewLandedCost(rows, RATE, 2, 200, 'EUR', 'EUR')).toBe(231); // 254 US$ → 2,31 €
-    expect(previewLandedCost(rows, RATE, 2, null, 'USD', 'USD')).toBe(0);
-    expect(previewLandedCost(rows, RATE, 99, 100, 'USD', 'USD')).toBeNull();
+    expect(previewLandedCost(rows, RATE, 2, { theoreticalCents: 220, currency: 'USD' }, 'USD')).toBe(254);
+    expect(previewLandedCost(rows, RATE, 2, { theoreticalCents: 200, currency: 'EUR' }, 'EUR')).toBe(231); // 254 US$ → 2,31 €
+    expect(previewLandedCost(rows, RATE, 2, { theoreticalCents: null, currency: 'USD' }, 'USD')).toBe(0);
+    expect(previewLandedCost(rows, RATE, 99, { theoreticalCents: 100, currency: 'USD' }, 'USD')).toBeNull();
   });
 
   it('also covers lines with a pending price', () => {
@@ -146,5 +148,32 @@ describe('sale price and margin (markup over cost)', () => {
   it('returns nulls when nothing is set or the cost is unknown', () => {
     const [p] = computeProductCosts([row({ unitPriceCents: null, marginBp: 5000 })], RATE);
     expect(productSaleInfo(p, 'EUR')).toEqual({ currency: 'EUR', landedUnitCents: null, salePriceCents: null, marginBp: 5000 });
+  });
+});
+
+describe('handling cost before selling', () => {
+  it('adds the handling cost per unit (converted) to the landed cost without changing the shipping share', () => {
+    const [line] = computeProductCosts([row({ shippingCents: 500, handlingCostCents: 100, handlingCurrency: 'EUR' })], RATE);
+    // 1,00 US$ + 0,50 US$ de envío por unidad + 1,10 US$ (1,00 €) de manipulación
+    expect(line).toMatchObject({ allocatedPerUnitCents: 50, handlingPerUnitCents: 110, landedUnitCents: 260 });
+  });
+
+  it('counts no handling when none is set', () => {
+    const [line] = computeProductCosts([row({})], RATE);
+    expect(line).toMatchObject({ handlingPerUnitCents: 0, landedUnitCents: 100 });
+  });
+
+  it('adds handling to a replacement with a theoretical value', () => {
+    const [line] = computeProductCosts(
+      [row({ unitPriceCents: 0, theoreticalCostCents: 300, theoreticalCurrency: 'USD', handlingCostCents: 50, handlingCurrency: 'USD' })],
+      RATE,
+    );
+    expect(line.landedUnitCents).toBe(350);
+  });
+
+  it('previews the landed cost with the handling being typed', () => {
+    const rows = [row({ lineId: 1, shippingCents: 500 })];
+    expect(previewLandedCost(rows, RATE, 1, { handlingCents: 40, currency: 'USD' }, 'USD')).toBe(190);
+    expect(previewLandedCost(rows, RATE, 1, { handlingCents: null, currency: 'USD' }, 'USD')).toBe(150);
   });
 });

@@ -156,27 +156,33 @@ export interface LinePricingInput {
   readonly marginBp: number | null;
   readonly theoreticalCostCents: number | null;
   readonly theoreticalCurrency: Currency | null;
+  readonly handlingCostCents: number | null;
+  readonly handlingCurrency: Currency | null;
+}
+
+/** An optional amount with its currency: the currency is required with an amount and dropped without one. */
+function optionalAmount(body: Body, amountKey: string, currencyKey: string, what: string) {
+  const cents = nullableInteger(body, amountKey, 0, MAX_CENTS);
+  const currency = body[currencyKey] === null || body[currencyKey] === undefined ? null : oneOf<Currency>(body, currencyKey, CURRENCIES);
+  if (cents !== null && currency === null) throw badRequest(`«${currencyKey}» es obligatorio con ${what}`);
+  return { cents, currency: cents === null ? null : currency };
 }
 
 /** Either a sale price (with its currency) or a margin over cost; both null clears the pricing. */
 export function parseLinePricingInput(raw: unknown): LinePricingInput {
   const body = asObject(raw);
-  const salePriceCents = nullableInteger(body, 'salePriceCents', 0, MAX_CENTS);
-  const saleCurrency = body.saleCurrency === null || body.saleCurrency === undefined ? null : oneOf<Currency>(body, 'saleCurrency', CURRENCIES);
+  const sale = optionalAmount(body, 'salePriceCents', 'saleCurrency', 'un precio de venta');
   const marginBp = nullableInteger(body, 'marginBp', -10_000, 10_000_000);
-  if (salePriceCents !== null && saleCurrency === null) throw badRequest('«saleCurrency» es obligatorio con un precio de venta');
-  const theoreticalCostCents = nullableInteger(body, 'theoreticalCostCents', 0, MAX_CENTS);
-  const theoreticalCurrency =
-    body.theoreticalCurrency === null || body.theoreticalCurrency === undefined ? null : oneOf<Currency>(body, 'theoreticalCurrency', CURRENCIES);
-  if (theoreticalCostCents !== null && theoreticalCurrency === null) {
-    throw badRequest('«theoreticalCurrency» es obligatorio con un valor teórico');
-  }
+  const theoretical = optionalAmount(body, 'theoreticalCostCents', 'theoreticalCurrency', 'un valor teórico');
+  const handling = optionalAmount(body, 'handlingCostCents', 'handlingCurrency', 'unos gastos de manipulación');
   return {
-    salePriceCents,
-    saleCurrency: salePriceCents === null ? null : saleCurrency,
+    salePriceCents: sale.cents,
+    saleCurrency: sale.currency,
     marginBp,
-    theoreticalCostCents,
-    theoreticalCurrency: theoreticalCostCents === null ? null : theoreticalCurrency,
+    theoreticalCostCents: theoretical.cents,
+    theoreticalCurrency: theoretical.currency,
+    handlingCostCents: handling.cents,
+    handlingCurrency: handling.currency,
   };
 }
 

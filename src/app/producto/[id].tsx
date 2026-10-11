@@ -34,6 +34,13 @@ const parseMarginBp = (text: string): number | null => {
   const value = parseDecimal(negative ? trimmed.slice(1) : trimmed);
   return value === null ? null : Math.round((negative ? -value : value) * 100);
 };
+/** Empty field → null (no value); invalid text → undefined. */
+const parseOptionalAmount = (text: string): number | null | undefined => {
+  if (text.trim() === '') return null;
+  return parseAmount(text) ?? undefined;
+};
+const storedToInput = (cents: number | null, from: Currency, rates: FxRates) =>
+  cents === null ? '' : centsToInput(convert(cents, from, 'EUR', rates));
 
 export default function ProductPricingScreen() {
   const lineId = parseIdParam(useLocalSearchParams<{ id: string }>().id) ?? 0;
@@ -51,19 +58,25 @@ export default function ProductPricingScreen() {
   const [saleText, setSaleText] = useState('');
   const [marginText, setMarginText] = useState('');
   const [theoreticalText, setTheoreticalText] = useState('');
+  const [handlingText, setHandlingText] = useState('');
   const [edited, setEdited] = useState<EditedField>(null);
   const [isTheoreticalEdited, setTheoreticalEdited] = useState(false);
+  const [isHandlingEdited, setHandlingEdited] = useState(false);
   const [isSaving, setSaving] = useState(false);
   const seeded = useRef(false);
 
-  const info = product ? productSaleInfo(product, currency) : null;
   // Zero-price replacements (or lines without price) are costed with a theoretical value.
   const needsTheoretical = !!product && (product.unitPriceCents === null || product.unitPriceCents === 0);
-  const theoreticalCents = theoreticalText.trim() === '' ? null : parseAmount(theoreticalText);
-  // Landed cost with the value being typed, recomputing the order's shipping share live.
-  const previewLanded = (value: number | null): number | null =>
-    data && value !== null ? previewLandedCost(data.orderRows, data.market, lineId, value, currency, currency) : null;
-  const landed = needsTheoretical ? previewLanded(theoreticalCents) : (info?.landedUnitCents ?? null);
+  const theoreticalCents = parseOptionalAmount(theoreticalText) ?? null;
+  const handlingCents = parseOptionalAmount(handlingText) ?? null;
+
+  /** Landed cost with the values being typed, recomputing the order's shipping share live. */
+  const previewLanded = (theoretical: number | null, handling: number | null): number | null => {
+    if (!data || (needsTheoretical && theoretical === null)) return null;
+    const overrides = { ...(needsTheoretical ? { theoreticalCents: theoretical } : {}), handlingCents: handling, currency };
+    return previewLandedCost(data.orderRows, data.market, lineId, overrides, currency);
+  };
+  const landed = previewLanded(theoreticalCents, handlingCents);
 
   // Seed the fields once from what is stored (later focus reloads must not discard typing).
   useEffect(() => {
@@ -72,10 +85,8 @@ export default function ProductPricingScreen() {
     const initial = productSaleInfo(product, 'EUR');
     setSaleText(initial.salePriceCents === null ? '' : centsToInput(initial.salePriceCents));
     setMarginText(marginToInput(initial.marginBp));
-    if (product.theoreticalCostCents !== null) {
-      const from = product.theoreticalCurrency ?? product.currency;
-      setTheoreticalText(centsToInput(convert(product.theoreticalCostCents, from, 'EUR', product.rates)));
-    }
+    setTheoreticalText(storedToInput(product.theoreticalCostCents, product.theoreticalCurrency ?? product.currency, product.rates));
+    setHandlingText(storedToInput(product.handlingCostCents, product.handlingCurrency ?? product.currency, product.rates));
   }, [product]);
 
   if (error) return <ErrorView message={error} onRetry={reload} />;
@@ -83,32 +94,35 @@ export default function ProductPricingScreen() {
     return loading ? <LoadingView /> : <EmptyState icon="help-circle-outline" title="Producto no encontrado" message="Puede que se haya eliminado." />;
   }
 
+  const toCurrency = (cents: number | null, next: Currency) => (cents === null ? '' : centsToInput(convert(cents, currency, next, product.rates)));
   const changeCurrency = (next: Currency) => {
     const sale = parseAmount(saleText);
-    if (sale !== null) setSaleText(centsToInput(convert(sale, currency, next, product.rates)));
-    if (theoreticalCents !== null) setTheoreticalText(centsToInput(convert(theoreticalCents, currency, next, product.rates)));
+    if (sale !== null) setSaleText(toCurrency(sale, next));
+    if (theoreticalCents !== null) setTheoreticalText(toCurrency(theoreticalCents, next));
+    if (handlingCents !== null) setHandlingText(toCurrency(handlingCents, next));
     setCurrency(next);
+  };
+  /** When the cost changes, keep whichever sale field the user drives and recompute the other one. */
+  const syncSaleWithCost = (nextLanded: number | null) => {
+    if (nextLanded === null) return;
+    if (edited === 'sale') {
+      const sale = parseAmount(saleText);
+      setMarginText(marginToInput(sale === null ? null : marginFromSalePrice(nextLanded, sale)));
+      return;
+    }
+    const margin = parseMarginBp(marginText);
+    if (margin !== null) setSaleText(centsToInput(salePriceFromMargin(nextLanded, margin)));
   };
   const onTheoreticalChange = (text: string) => {
     setTheoreticalText(text);
     setTheoreticalEdited(true);
-    const value = text.trim() === '' ? null : parseAmount(text);
-    const nextLanded = previewLanded(value);
-    if (nextLanded === null) return;
-    // Keep whichever field the user drives and recompute the other one.
-    if (edited === 'sale') {
-      const sale = parseAmount(saleText);
-      setMarginText(marginToInput(sale === null ? null : marginFromSalePrice(nextLanded, sale)));
-    } else {
-      const margin = parseMarginBp(marginText);
-      if (margin !== null) setSaleText(centsToInput(salePriceFromMargin(nextLanded, margin)));
-    }
+    syncSaleWithCost(previewLanded(parseOptionalAmount(text) ?? null, handlingCents));
   };
-  // The theoretical value only feeds costing; the order line keeps its own price (0).
-  const theoreticalPricing = () =>
-    needsTheoretical
-      ? { theoreticalCostCents: theoreticalCents, theoreticalCurrency: theoreticalCents === null ? null : currency }
-      : { theoreticalCostCents: product.theoreticalCostCents, theoreticalCurrency: product.theoreticalCurrency };
+  const onHandlingChange = (text: string) => {
+    setHandlingText(text);
+    setHandlingEdited(true);
+    syncSaleWithCost(previewLanded(theoreticalCents, parseOptionalAmount(text) ?? null));
+  };
   const onSaleChange = (text: string) => {
     setSaleText(text);
     setEdited('sale');
@@ -122,6 +136,17 @@ export default function ProductPricingScreen() {
     const margin = parseMarginBp(text);
     setSaleText(margin !== null && landed !== null ? centsToInput(salePriceFromMargin(landed, margin)) : '');
   };
+
+  // Theoretical value and handling only feed costing; the order line keeps its own price.
+  // Untouched values are sent as stored, so switching currency never adds rounding.
+  const costPricing = () => ({
+    ...(needsTheoretical && isTheoreticalEdited
+      ? { theoreticalCostCents: theoreticalCents, theoreticalCurrency: theoreticalCents === null ? null : currency }
+      : { theoreticalCostCents: product.theoreticalCostCents, theoreticalCurrency: product.theoreticalCurrency }),
+    ...(isHandlingEdited
+      ? { handlingCostCents: handlingCents, handlingCurrency: handlingCents === null ? null : currency }
+      : { handlingCostCents: product.handlingCostCents, handlingCurrency: product.handlingCurrency }),
+  });
 
   const save = async (pricing: Parameters<typeof saveLinePricing>[1], message: string) => {
     setSaving(true);
@@ -137,30 +162,35 @@ export default function ProductPricingScreen() {
   };
 
   const handleSave = () => {
-    const invalidTheoretical = needsTheoretical && theoreticalText.trim() !== '' && theoreticalCents === null;
-    if (!announceErrors({ theoretical: invalidTheoretical ? 'Valor teórico no válido' : undefined })) return;
-    const theoretical = theoreticalPricing();
+    const isValid = announceErrors({
+      theoretical: needsTheoretical && parseOptionalAmount(theoreticalText) === undefined ? 'Valor teórico no válido' : undefined,
+      handling: parseOptionalAmount(handlingText) === undefined ? 'Gastos de manipulación no válidos' : undefined,
+    });
+    if (!isValid) return;
+    const costs = costPricing();
     if (edited === 'margin') {
       const marginBp = parseMarginBp(marginText);
       if (!announceErrors({ margin: marginBp === null ? 'Porcentaje no válido (ej. 25)' : undefined })) return;
-      void save({ salePriceCents: null, saleCurrency: null, marginBp, ...theoretical }, 'Beneficio guardado');
+      void save({ salePriceCents: null, saleCurrency: null, marginBp, ...costs }, 'Beneficio guardado');
       return;
     }
     if (edited === 'sale') {
       const sale = parseAmount(saleText);
       if (!announceErrors({ sale: sale === null ? 'Precio de venta no válido' : undefined })) return;
-      void save({ salePriceCents: sale, saleCurrency: currency, marginBp: null, ...theoretical }, 'Precio de venta guardado');
+      void save({ salePriceCents: sale, saleCurrency: currency, marginBp: null, ...costs }, 'Precio de venta guardado');
       return;
     }
-    // Only the theoretical value changed: keep the stored sale pricing as it is.
-    void save(
-      { salePriceCents: product.salePriceCents, saleCurrency: product.saleCurrency, marginBp: product.marginBp, ...theoretical },
-      'Valor teórico guardado',
-    );
+    // Only the costs changed: keep the stored sale pricing as it is.
+    void save({ salePriceCents: product.salePriceCents, saleCurrency: product.saleCurrency, marginBp: product.marginBp, ...costs }, 'Coste guardado');
   };
 
   const title = [formatQuantity(product.quantity), '×', product.pieceType, product.measurements].filter(Boolean).join(' ');
   const money = (cents: number) => formatMoney(convert(cents, product.currency, currency, product.rates), currency);
+  const symbol = currencySymbol(currency);
+  const baseCents = needsTheoretical ? (theoreticalCents ?? 0) : convert(product.unitPriceCents ?? 0, product.currency, currency, product.rates);
+  const handlingShown = handlingCents ?? 0;
+  const hasChanges = edited !== null || isTheoreticalEdited || isHandlingEdited;
+  const info = productSaleInfo(product, currency);
 
   return (
     <FormScroll>
@@ -179,19 +209,29 @@ export default function ProductPricingScreen() {
       />
 
       <SectionHeader title="Coste por unidad" icon="calculator-outline" />
-      {needsTheoretical ? (
-        <Card>
-          <InfoRow icon="receipt-outline" label="Precio en el pedido" value={product.unitPriceCents === null ? 'Sin precio' : money(0)} />
-          <TextField
-            label={`Valor teórico por unidad (${currencySymbol(currency)})`}
-            value={theoreticalText}
-            onChangeText={onTheoreticalChange}
-            keyboardType="decimal-pad"
-            placeholder="0,00"
-            hint="Para piezas de reposición: solo sirve para calcular la venta; el pedido no cambia"
-          />
-        </Card>
-      ) : null}
+      <Card>
+        {needsTheoretical ? (
+          <>
+            <InfoRow icon="receipt-outline" label="Precio en el pedido" value={product.unitPriceCents === null ? 'Sin precio' : money(0)} />
+            <TextField
+              label={`Valor teórico por unidad (${symbol})`}
+              value={theoreticalText}
+              onChangeText={onTheoreticalChange}
+              keyboardType="decimal-pad"
+              placeholder="0,00"
+              hint="Para piezas de reposición: solo sirve para calcular la venta; el pedido no cambia"
+            />
+          </>
+        ) : null}
+        <TextField
+          label={`Gastos de manipulación por unidad (${symbol})`}
+          value={handlingText}
+          onChangeText={onHandlingChange}
+          keyboardType="decimal-pad"
+          placeholder="0,00"
+          hint="Limpieza, corte, pulido, embalaje… antes de vender. Se suma al coste; el pedido no cambia"
+        />
+      </Card>
       {landed === null ? (
         <Text style={styles.note}>
           {needsTheoretical
@@ -203,13 +243,16 @@ export default function ProductPricingScreen() {
           <InfoRow
             icon="pricetag-outline"
             label={needsTheoretical ? 'Valor teórico por unidad' : 'Precio por unidad'}
-            value={needsTheoretical ? formatMoney(theoreticalCents ?? 0, currency) : money(product.unitPriceCents ?? 0)}
+            value={formatMoney(baseCents, currency)}
           />
           <InfoRow
             icon="airplane-outline"
             label="Envío + aduanas (proporcional)"
-            value={`+ ${needsTheoretical ? formatMoney(landed - (theoreticalCents ?? 0), currency) : money(product.allocatedPerUnitCents ?? 0)}`}
+            value={`+ ${formatMoney(landed - baseCents - handlingShown, currency)}`}
           />
+          {handlingShown > 0 ? (
+            <InfoRow icon="construct-outline" label="Manipulación" value={`+ ${formatMoney(handlingShown, currency)}`} />
+          ) : null}
           <InfoRow icon="calculator-outline" label="Coste unitario total" value={formatMoney(landed, currency)} isStrong />
         </Card>
       )}
@@ -217,7 +260,7 @@ export default function ProductPricingScreen() {
       <SectionHeader title="Venta" icon="cart-outline" />
       <Card>
         <TextField
-          label={`Precio de venta por unidad (${currencySymbol(currency)})`}
+          label={`Precio de venta por unidad (${symbol})`}
           value={saleText}
           onChangeText={onSaleChange}
           keyboardType="decimal-pad"
@@ -242,18 +285,13 @@ export default function ProductPricingScreen() {
         ) : null}
       </Card>
 
-      <Button label={isSaving ? 'Guardando…' : 'Guardar'} icon="checkmark" onPress={handleSave} isDisabled={isSaving || (edited === null && !isTheoreticalEdited)} />
-      {info?.salePriceCents !== null || product.marginBp !== null ? (
+      <Button label={isSaving ? 'Guardando…' : 'Guardar'} icon="checkmark" onPress={handleSave} isDisabled={isSaving || !hasChanges} />
+      {info.salePriceCents !== null || product.marginBp !== null ? (
         <Button
           variant="secondary"
           label="Quitar precio de venta"
           icon="close-circle-outline"
-          onPress={() =>
-            void save(
-              { salePriceCents: null, saleCurrency: null, marginBp: null, ...theoreticalPricing() },
-              'Precio de venta quitado',
-            )
-          }
+          onPress={() => void save({ salePriceCents: null, saleCurrency: null, marginBp: null, ...costPricing() }, 'Precio de venta quitado')}
           isDisabled={isSaving}
         />
       ) : null}
