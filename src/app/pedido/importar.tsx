@@ -60,6 +60,7 @@ export default function ImportScreen() {
     });
   const included = parsed.filter((line, i) => !excluded.has(i) && canImport(line));
   const willApplyShipping = Boolean(message.shipping && applyShipping);
+  const existingLabel = existing.length === 1 ? 'la línea actual' : `las ${existing.length} líneas actuales`;
   const linesLabel = plural(included.length, 'línea', 'líneas');
   const importLabel = isSaving
     ? 'Guardando…'
@@ -105,7 +106,7 @@ export default function ImportScreen() {
       return;
     }
     confirmDestructive({
-      title: `¿Reemplazar las ${existing.length} líneas actuales?`,
+      title: `¿Reemplazar ${existingLabel}?`,
       message: 'Se borrarán las líneas actuales, incluidos los precios que hayas añadido. No se puede deshacer.',
       confirmLabel: 'Reemplazar',
       onConfirm: () => void runImport(),
@@ -178,12 +179,12 @@ export default function ImportScreen() {
           {existing.length > 0 ? (
             <View style={styles.switchRow}>
               <Text style={styles.switchLabel} accessibilityElementsHidden importantForAccessibility="no">
-                Reemplazar las {existing.length} líneas actuales
+                Reemplazar {existingLabel}
               </Text>
               <Switch
                 value={replaceExisting}
                 onValueChange={setReplaceExisting}
-                accessibilityLabel={`Reemplazar las ${existing.length} líneas actuales`}
+                accessibilityLabel={`Reemplazar ${existingLabel}`}
               />
             </View>
           ) : null}
