@@ -1,10 +1,10 @@
 import * as Clipboard from 'expo-clipboard';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { Linking, StyleSheet, Text } from 'react-native';
+import { Linking, StyleSheet, Text, View } from 'react-native';
 import { shareText } from '@/lib/share';
 import { LinesList, PaymentsList, TotalsCard } from '@/components/orders/OrderSections';
 import { announce, confirmDestructive, showError } from '@/components/ui/alerts';
-import { StatusBadge } from '@/components/ui/Badges';
+import { Avatar, StatusStepper } from '@/components/ui/Visuals';
 import { Button, ButtonRow, IconButton } from '@/components/ui/Button';
 import { ChipGroup } from '@/components/ui/ChipGroup';
 import { Card, EmptyState, ErrorView, FormScroll, InfoRow, LoadingView, PressableRow, SectionHeader } from '@/components/ui/Layout';
@@ -14,7 +14,7 @@ import { ORDER_STATUSES, type OrderStatus } from '@/domain/types';
 import { useOrderDetail, type OrderDetail } from '@/hooks/useOrderDetail';
 import { ORDER_STATUS_ICON, ORDER_STATUS_LABEL } from '@/i18n/es';
 import { goBack, parseIdParam, trackingUrl, whatsappUrl } from '@/lib/params';
-import { typography, useThemedStyles, type Theme } from '@/theme/theme';
+import { spacing, typography, useThemedStyles, type Theme } from '@/theme/theme';
 
 function summaryFor(detail: OrderDetail): string {
   return orderSummaryText({
@@ -93,12 +93,15 @@ export default function OrderDetailScreen() {
       <Card>
         {supplier ? (
           <PressableRow onPress={() => router.push({ pathname: '/proveedor/[id]', params: { id: supplier.id } })} accessibilityLabel={`Proveedor ${supplier.name}`}>
-            <Text style={styles.title}>{supplier.name}</Text>
+            <View style={styles.supplierRow}>
+              <Avatar name={supplier.name} size={44} />
+              <Text style={styles.title}>{supplier.name}</Text>
+            </View>
           </PressableRow>
         ) : null}
         <InfoRow label="Fecha" value={formatDate(order.orderDate)} />
         <InfoRow label="Moneda del pedido" value={order.currency} />
-        <StatusBadge status={order.status} />
+        <StatusStepper status={order.status} />
         <ChipGroup<OrderStatus>
           label="Cambiar estado"
           value={order.status}
@@ -108,7 +111,7 @@ export default function OrderDetailScreen() {
         {order.notes ? <Text style={styles.body}>{order.notes}</Text> : null}
       </Card>
 
-      <SectionHeader title="Envío" />
+      <SectionHeader title="Envío" icon="airplane-outline" />
       <Card>
         {order.trackingNumber ? (
           <>
@@ -128,7 +131,7 @@ export default function OrderDetailScreen() {
         )}
       </Card>
 
-      <SectionHeader title={`Productos (${lines.length})`} action={<IconButton icon="add-circle-outline" label="Añadir línea" onPress={() => go('/pedido/linea')} />} />
+      <SectionHeader title={`Productos (${lines.length})`} icon="cube-outline" action={<IconButton icon="add-circle-outline" label="Añadir línea" onPress={() => go('/pedido/linea')} />} />
       {lines.length > 0 ? <LinesList lines={lines} currency={order.currency} onPressLine={(lineId) => go('/pedido/linea', { id: lineId })} /> : null}
       <Button
         variant={lines.length === 0 ? 'primary' : 'secondary'}
@@ -137,14 +140,14 @@ export default function OrderDetailScreen() {
         onPress={() => go('/pedido/importar')}
       />
 
-      <SectionHeader title="Importes" />
+      <SectionHeader title="Importes" icon="calculator-outline" />
       <TotalsCard totals={totals} payment={payment} currency={order.currency} usesOrderRate={order.fxRateMicros !== null} />
 
-      <SectionHeader title={`Pagos (${payments.length})`} action={<IconButton icon="add-circle-outline" label="Registrar pago" onPress={() => go('/pedido/pago')} />} />
+      <SectionHeader title={`Pagos (${payments.length})`} icon="cash-outline" action={<IconButton icon="add-circle-outline" label="Registrar pago" onPress={() => go('/pedido/pago')} />} />
       {payments.length > 0 ? <PaymentsList payments={payments} onPressPayment={(paymentId) => go('/pedido/pago', { id: paymentId })} /> : null}
       {payment.status !== 'pagado' ? <Button variant="secondary" icon="cash-outline" label="Registrar pago" onPress={() => go('/pedido/pago')} /> : null}
 
-      <SectionHeader title="Acciones" />
+      <SectionHeader title="Acciones" icon="flash-outline" />
       <Button icon="logo-whatsapp" label={supplier?.whatsapp ? 'Enviar resumen por WhatsApp' : 'Compartir resumen'} onPress={sendSummary} />
       <Button variant="destructive" icon="trash-outline" label="Eliminar pedido" onPress={handleDelete} />
     </FormScroll>
@@ -153,6 +156,7 @@ export default function OrderDetailScreen() {
 
 const makeStyles = (theme: Theme) =>
   StyleSheet.create({
-    title: { ...typography.title, color: theme.colors.text },
+    title: { ...typography.title, color: theme.colors.text, flexShrink: 1 },
+    supplierRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
     body: { ...typography.body, color: theme.colors.text },
   });

@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { CONTENT_MAX_WIDTH, EmptyState, ErrorView, LoadingView, PressableRow } from '@/components/ui/Layout';
 import { TextField } from '@/components/ui/TextField';
+import { Avatar, IconText } from '@/components/ui/Visuals';
 import { listSuppliers } from '@/api/data';
 import { foldText } from '@/domain/orderFilters';
 import { useLoader } from '@/hooks/useLoader';
@@ -51,13 +52,14 @@ export default function SuppliersScreen() {
             accessibilityLabel={`${item.name}${item.whatsapp ? `, WhatsApp ${item.whatsapp}` : ''}`}
             accessibilityHint="Abre el proveedor y sus pedidos"
           >
-            <Text style={styles.name}>{item.name}</Text>
-            {item.whatsapp ? <Text style={styles.secondary}>WhatsApp {item.whatsapp}</Text> : null}
-            {item.notes ? (
-              <Text style={styles.secondary} numberOfLines={2}>
-                {item.notes}
-              </Text>
-            ) : null}
+            <View style={styles.row}>
+              <Avatar name={item.name} />
+              <View style={styles.info}>
+                <Text style={styles.name}>{item.name}</Text>
+                {item.whatsapp ? <IconText icon="logo-whatsapp">{item.whatsapp}</IconText> : null}
+                {item.notes ? <IconText icon="document-text-outline">{item.notes}</IconText> : null}
+              </View>
+            </View>
           </PressableRow>
         </View>
       )}
@@ -73,5 +75,7 @@ const makeStyles = (theme: Theme) =>
     separator: { height: spacing.sm },
     card: { backgroundColor: theme.colors.surface, borderRadius: radius.lg, paddingHorizontal: spacing.lg, paddingVertical: spacing.xs },
     name: { ...typography.headline, color: theme.colors.text },
+    row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xs },
+    info: { flex: 1, gap: spacing.xs },
     secondary: { ...typography.footnote, color: theme.colors.textSecondary },
   });

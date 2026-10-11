@@ -8,6 +8,7 @@ import { PAYMENT_METHOD_LABEL } from '@/i18n/es';
 import { spacing, typography, useThemedStyles, type Theme } from '@/theme/theme';
 import { PaymentBadge, PendingPriceBadge } from '../ui/Badges';
 import { Card, InfoRow, PressableRow } from '../ui/Layout';
+import { PaymentMeter } from '../ui/Visuals';
 
 type TotalsCardProps = { totals: OrderTotals; payment: PaymentSummary; currency: Currency; usesOrderRate: boolean };
 
@@ -17,18 +18,29 @@ export function TotalsCard({ totals, payment, currency, usesOrderRate }: TotalsC
   const rateSource = usesOrderRate ? 'fijado en el pedido' : 'de ajustes';
   return (
     <Card>
-      <InfoRow label="Mercancía" value={money(totals.goodsCents)} />
-      <InfoRow label="Envío" value={money(totals.shippingCents)} />
-      <InfoRow label="Aduanas" value={money(totals.customsCents)} />
+      <InfoRow icon="cube-outline" label="Mercancía" value={money(totals.goodsCents)} />
+      <InfoRow icon="airplane-outline" label="Envío" value={money(totals.shippingCents)} />
+      <InfoRow icon="shield-checkmark-outline" label="Aduanas" value={money(totals.customsCents)} />
       <View style={styles.divider} />
-      <InfoRow label={totals.pendingPriceCount > 0 ? 'Total provisional' : 'Total'} value={money(totals.totalCents)} isStrong />
-      <InfoRow label="Pagado" value={money(payment.paidCents)} />
-      <InfoRow label="Pendiente de pago" value={money(payment.pendingCents)} isStrong />
-      {payment.overpaidCents > 0 ? <InfoRow label="Pagado de más" value={money(payment.overpaidCents)} /> : null}
-      <View style={styles.badges}>
+      <InfoRow
+        icon="receipt-outline"
+        label={totals.pendingPriceCount > 0 ? 'Total provisional' : 'Total'}
+        value={money(totals.totalCents)}
+        isStrong
+      />
+      {totals.totalCents > 0 ? (
+        <PaymentMeter paidCents={payment.paidCents} totalCents={totals.totalCents} currency={currency} status={payment.status} />
+      ) : (
         <PaymentBadge status={payment.status} />
-        {totals.pendingPriceCount > 0 ? <PendingPriceBadge count={totals.pendingPriceCount} /> : null}
-      </View>
+      )}
+      <InfoRow icon="checkmark-circle-outline" label="Pagado" value={money(payment.paidCents)} />
+      <InfoRow icon="hourglass-outline" label="Pendiente de pago" value={money(payment.pendingCents)} isStrong />
+      {payment.overpaidCents > 0 ? <InfoRow icon="alert-circle-outline" label="Pagado de más" value={money(payment.overpaidCents)} /> : null}
+      {totals.pendingPriceCount > 0 ? (
+        <View style={styles.badges}>
+          <PendingPriceBadge count={totals.pendingPriceCount} />
+        </View>
+      ) : null}
       <Text style={styles.note}>
         Cambio usado: 1 € = {formatRate(totals.rateMicros)} US$ ({rateSource})
       </Text>

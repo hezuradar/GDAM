@@ -20,26 +20,34 @@ export function Card({ children }: { children: ReactNode }) {
   return <View style={styles.card}>{children}</View>;
 }
 
-export function SectionHeader({ title, action }: { title: string; action?: ReactNode }) {
+export function SectionHeader({ title, action, icon }: { title: string; action?: ReactNode; icon?: IconName }) {
   const styles = useThemedStyles(makeStyles);
+  const theme = useTheme();
   return (
     <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle} accessibilityRole="header">
-        {title}
-      </Text>
+      <View style={styles.sectionTitleRow}>
+        {icon ? <Ionicons name={icon} size={22} color={theme.colors.primary} /> : null}
+        <Text style={styles.sectionTitle} accessibilityRole="header">
+          {title}
+        </Text>
+      </View>
       {action}
     </View>
   );
 }
 
-type InfoRowProps = { label: string; value: string; isStrong?: boolean };
+type InfoRowProps = { label: string; value: string; isStrong?: boolean; icon?: IconName };
 
 /** Label/value row; read by VoiceOver as one element. */
-export function InfoRow({ label, value, isStrong = false }: InfoRowProps) {
+export function InfoRow({ label, value, isStrong = false, icon }: InfoRowProps) {
   const styles = useThemedStyles(makeStyles);
+  const theme = useTheme();
   return (
     <View style={styles.infoRow} accessible accessibilityLabel={`${label}: ${value}`}>
-      <Text style={[styles.infoLabel, isStrong && styles.strong]}>{label}</Text>
+      <View style={styles.sectionTitleRow}>
+        {icon ? <Ionicons name={icon} size={18} color={theme.colors.textSecondary} /> : null}
+        <Text style={[styles.infoLabel, isStrong && styles.strong]}>{label}</Text>
+      </View>
       <Text style={[styles.infoValue, isStrong && styles.strong]}>{value}</Text>
     </View>
   );
@@ -130,6 +138,7 @@ const makeStyles = (theme: Theme) =>
       minHeight: MIN_TOUCH,
     },
     sectionTitle: { ...typography.title, color: theme.colors.text },
+    sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexShrink: 1 },
     infoRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md, flexWrap: 'wrap' },
     infoLabel: { ...typography.body, color: theme.colors.textSecondary, flexShrink: 1 },
     infoValue: { ...typography.body, color: theme.colors.text, fontVariant: ['tabular-nums'] },

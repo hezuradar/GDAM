@@ -4,6 +4,8 @@ import { useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { FilterSheet } from '@/components/orders/FilterSheet';
 import { IconButton } from '@/components/ui/Button';
+import { StatTile } from '@/components/ui/Visuals';
+import { plural } from '@/domain/exportText';
 import { OrderCard } from '@/components/orders/OrderCard';
 import { CONTENT_MAX_WIDTH, EmptyState, ErrorView, LoadingView } from '@/components/ui/Layout';
 import { formatMoney } from '@/domain/money';
@@ -22,6 +24,20 @@ function pendingSummary(items: readonly OrderListItem[]): string {
   return parts.length > 0 ? `Pendiente de pago: ${parts.join(' + ')}` : 'Todo pagado';
 }
 
+/** Headline figures over all orders (not only the filtered ones). */
+function orderStats(items: readonly OrderListItem[]) {
+  const pendingParts = CURRENCIES.map((currency) => {
+    const cents = items.filter((i) => i.currency === currency).reduce((sum, i) => sum + i.pendingCents, 0);
+    return cents > 0 ? formatMoney(cents, currency) : null;
+  }).filter(Boolean);
+  return {
+    pendingText: pendingParts.length > 0 ? pendingParts.join(' + ') : '0',
+    unpaidCount: items.filter((i) => i.pendingCents > 0).length,
+    shippedCount: items.filter((i) => i.status === 'enviado').length,
+    missingPriceCount: items.filter((i) => i.pendingPriceCount > 0).length,
+  };
+}
+
 export default function OrdersScreen() {
   const theme = useTheme();
   const styles = useThemedStyles(makeStyles);
@@ -31,6 +47,10 @@ export default function OrdersScreen() {
 
   const visible = useMemo(() => filterOrders(data?.items ?? [], criteria), [data, criteria]);
   const activeFilters = countActiveFilters(criteria);
+  const stats = useMemo(() => orderStats(data?.items ?? []), [data]);
+  const isUnpaidFilter = (criteria.paymentStatuses ?? []).length === 2 && !(criteria.paymentStatuses ?? []).includes('pagado');
+  const isShippedFilter = (criteria.statuses ?? []).length === 1 && criteria.statuses?.[0] === 'enviado';
+  const toggle = (patch: Partial<OrderFilterCriteria>) => setCriteria((c) => ({ ...c, ...patch }));
   const openOrder = useCallback((id: number) => router.push({ pathname: '/pedido/[id]', params: { id } }), []);
   const renderItem = useCallback(({ item }: { item: OrderListItem }) => <OrderCard item={item} onPress={openOrder} />, [openOrder]);
 
@@ -89,6 +109,32 @@ export default function OrdersScreen() {
           <Ionicons name="options-outline" size={22} color={activeFilters > 0 ? theme.colors.onPrimary : theme.colors.primary} />
           {activeFilters > 0 ? <Text style={styles.filterCount}>{activeFilters}</Text> : null}
         </Pressable>
+      </View>
+      <View style={styles.tiles}>
+        <StatTile
+          icon="wallet-outline"
+          label="Por pagar"
+          value={stats.pendingText}
+          detail={plural(stats.unpaidCount, 'pedido', 'pedidos')}
+          isActive={isUnpaidFilter}
+          onPress={() => toggle({ paymentStatuses: isUnpaidFilter ? [] : ['sin_pagar', 'parcial'] })}
+          accessibilityHint="Muestra solo los pedidos con pagos pendientes"
+        />
+        <StatTile
+          icon="airplane-outline"
+          label="En camino"
+          value={String(stats.shippedCount)}
+          detail={stats.shippedCount === 1 ? 'pedido enviado' : 'pedidos enviados'}
+          isActive={isShippedFilter}
+          onPress={() => toggle({ statuses: isShippedFilter ? [] : ['enviado'] })}
+          accessibilityHint="Muestra solo los pedidos enviados"
+        />
+        <StatTile
+          icon="pricetags-outline"
+          label="Sin precio"
+          value={String(stats.missingPriceCount)}
+          detail={stats.missingPriceCount === 1 ? 'pedido con precios pendientes' : 'pedidos con precios pendientes'}
+        />
       </View>
       <Text style={styles.summary} accessibilityLiveRegion="polite">
         {visible.length} {visible.length === 1 ? 'pedido' : 'pedidos'} · {pendingSummary(visible)}
@@ -157,4 +203,5 @@ const makeStyles = (theme: Theme) =>
     filterCount: { ...typography.footnote, fontWeight: '700', color: theme.colors.onPrimary },
     pressed: { opacity: 0.6 },
     summary: { ...typography.footnote, color: theme.colors.textSecondary },
+    tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   });
