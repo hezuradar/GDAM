@@ -1,4 +1,54 @@
-import { canImport, parseWhatsAppText, toImportableLine } from '../whatsappParser';
+import { canImport, parseWhatsAppMessage, parseWhatsAppText, toImportableLine } from '../whatsappParser';
+
+describe('English and Spanish formats', () => {
+  it.each([
+    ['100 pcs Hex bolt M8x40 $0.05 each', { quantity: 100, pieceType: 'Hex bolt', measurements: 'M8x40', unitPriceCents: 5, priceCurrency: 'USD' }],
+    ['Hex bolt M8x40 - 100 pcs @ 0.05 USD', { quantity: 100, pieceType: 'Hex bolt', measurements: 'M8x40', unitPriceCents: 5, priceCurrency: 'USD' }],
+    ['Tornillo M8x40 x 50 uds a 0,10€', { quantity: 50, pieceType: 'Tornillo', measurements: 'M8x40', unitPriceCents: 10, priceCurrency: 'EUR' }],
+    ['Qty: 20 Flange DN50 unit price 3.20 EUR', { quantity: 20, pieceType: 'Flange', measurements: 'DN50', unitPriceCents: 320, priceCurrency: 'EUR' }],
+    ['30 units steel plate 200x300x5 at 12.50 dollars per piece', { quantity: 30, pieceType: 'steel plate', measurements: '200x300x5', unitPriceCents: 1250, priceCurrency: 'USD' }],
+    ['Cantidad: 8 brida DN80 precio unitario 6,40 €', { quantity: 8, pieceType: 'brida', measurements: 'DN80', unitPriceCents: 640, priceCurrency: 'EUR' }],
+    ['tubo 25x2 L=1000 12 piezas 4,20 € c/u', { quantity: 12, pieceType: 'tubo', measurements: '25x2 L=1000', unitPriceCents: 420, priceCurrency: 'EUR' }],
+  ])('%p', (text, expected) => {
+    const [line] = parseWhatsAppText(text);
+    expect(line).toMatchObject({ ...expected, issues: [] });
+  });
+});
+
+describe('parseWhatsAppMessage', () => {
+  it('separates product lines, shipping and totals', () => {
+    const message = parseWhatsAppMessage(
+      'Hi, here is the order\n10 tornillo M8x40 0,25€\nEnvío: 25 €\nTotal: 27,50 €',
+    );
+    expect(message.lines.map((l) => l.pieceType)).toEqual(['Hi, here is the order', 'tornillo']);
+    expect(message.shipping).toEqual({ cents: 2500, currency: 'EUR', rawText: 'Envío: 25 €' });
+    expect(message.ignored).toEqual(['Total: 27,50 €']);
+  });
+
+  it.each([
+    ['Shipping cost: USD 40.50', 4050, 'USD'],
+    ['Freight 35$', 3500, 'USD'],
+    ['Gastos de envío 18,90 euros', 1890, 'EUR'],
+    ['Portes: 12', 1200, null],
+    ['Delivery fee $15', 1500, 'USD'],
+  ])('detects shipping in %p', (text, cents, currency) => {
+    expect(parseWhatsAppMessage(text).shipping).toEqual({ cents, currency, rawText: text });
+  });
+
+  it('ignores shipping lines without an amount and keeps product lines that mention shipping', () => {
+    const message = parseWhatsAppMessage('Shipping included\n10 cajas de envío 30x20');
+    expect(message.shipping).toBeNull();
+    expect(message.ignored).toEqual(['Shipping included']);
+    expect(message.lines).toHaveLength(1);
+    expect(message.lines[0].quantity).toBe(10);
+  });
+
+  it('keeps only the first shipping amount and reports the rest as ignored', () => {
+    const message = parseWhatsAppMessage('Envío 20€\nShipping $30');
+    expect(message.shipping?.cents).toBe(2000);
+    expect(message.ignored).toEqual(['Shipping $30']);
+  });
+});
 
 describe('toImportableLine', () => {
   const RATE = 1_100_000;
