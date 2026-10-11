@@ -25,7 +25,7 @@ export interface Distribution {
   /** What the lines add up to after rounding unit prices to cents. */
   readonly resultingCents: number;
   readonly differenceCents: number;
-  /** Zero-price replacement lines left out. */
+  /** Lines left out: zero-price replacements and the ones the user excluded. */
   readonly excludedCount: number;
 }
 
@@ -42,13 +42,26 @@ export function goodsFromTotal(
   return includesExtras ? totalCents - extras.shippingCents - extras.customsCents : totalCents;
 }
 
-/** Unit prices for the eligible lines, or null when there is nothing to split or the amount is negative. */
+/** What the excluded lines that already have a price add up to (taken off a total that covers them). */
+export function excludedPricedCents(lines: readonly DistributableLine[], excludedLineIds: ReadonlySet<number>): number {
+  return lines.reduce(
+    (sum, line) =>
+      excludedLineIds.has(line.id) && line.unitPriceCents !== null ? sum + Math.round(line.quantity * line.unitPriceCents) : sum,
+    0,
+  );
+}
+
+/**
+ * Unit prices for the eligible lines, or null when there is nothing to split or the amount is negative.
+ * Excluded lines keep whatever price they have.
+ */
 export function distributeTotal(
   lines: readonly DistributableLine[],
   goodsCents: number,
   mode: DistributionMode,
+  excludedLineIds: ReadonlySet<number> = new Set(),
 ): Distribution | null {
-  const eligible = lines.filter((line) => !isReplacementLine(line) && line.quantity > 0);
+  const eligible = lines.filter((line) => !isReplacementLine(line) && line.quantity > 0 && !excludedLineIds.has(line.id));
   if (eligible.length === 0 || goodsCents < 0) return null;
 
   const totalPieces = eligible.reduce((sum, line) => sum + line.quantity, 0);

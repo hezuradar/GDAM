@@ -1,4 +1,4 @@
-import { distributeTotal, goodsFromTotal } from '../distribute';
+import { distributeTotal, excludedPricedCents, goodsFromTotal } from '../distribute';
 
 const line = (id: number, quantity: number, unitPriceCents: number | null = null) => ({ id, quantity, unitPriceCents });
 
@@ -66,5 +66,28 @@ describe('distributeTotal edge cases', () => {
 
   it('allows a zero amount', () => {
     expect(distributeTotal([line(1, 4)], 0, 'pieza')?.prices).toEqual([{ lineId: 1, unitPriceCents: 0 }]);
+  });
+});
+
+describe('distributeTotal with excluded lines', () => {
+  it('splits only among the lines that are not excluded', () => {
+    const result = distributeTotal([line(1, 10), line(2, 10, 500), line(3, 5)], 1500, 'pieza', new Set([2]));
+    expect(result?.prices).toEqual([
+      { lineId: 1, unitPriceCents: 100 },
+      { lineId: 3, unitPriceCents: 100 },
+    ]);
+    expect(result?.excludedCount).toBe(1);
+  });
+
+  it('returns null when every line is excluded', () => {
+    expect(distributeTotal([line(1, 10)], 1000, 'linea', new Set([1]))).toBeNull();
+  });
+});
+
+describe('excludedPricedCents', () => {
+  it('adds up only the excluded lines that have a price', () => {
+    const lines = [line(1, 10, 200), line(2, 3, null), line(3, 4, 150)];
+    expect(excludedPricedCents(lines, new Set([1, 2]))).toBe(2000);
+    expect(excludedPricedCents(lines, new Set())).toBe(0);
   });
 });
