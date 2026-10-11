@@ -86,6 +86,13 @@ npx wrangler secret put APP_PASSWORD
 También se puede hacer en el panel de Cloudflare: **Workers & Pages → compras-gdam → Settings → Variables and secrets →
 Add**, con tipo **Secret** y nombre `APP_PASSWORD`.
 
+## Publicación
+
+- **Automática:** cada `git push` a `main` hace que Cloudflare (Workers Builds) ejecute `npm run build` y
+  `npx wrangler deploy`. El estado se ve en el panel: Workers → compras-gdam → Deployments.
+- **Cambios en la base de datos:** si se añade una migración en `migrations/`, hay que aplicarla una vez a mano con
+  `npm run db:migrate` (la publicación automática no toca el esquema).
+
 ## Desarrollo
 
 ```bash
