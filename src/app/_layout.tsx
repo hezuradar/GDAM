@@ -1,5 +1,6 @@
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { useMemo } from 'react';
+import { AuthGate } from '@/components/AuthGate';
 import { useTheme } from '@/theme/theme';
 
 /** Data lives in the cloud database behind the /api Worker; screens load it through @/api/data. */
@@ -15,6 +16,7 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={navigationTheme}>
+      <AuthGate>
       <Stack screenOptions={{ headerBackTitle: 'Atrás', contentStyle: { backgroundColor: theme.colors.background } }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false, title: 'Inicio' }} />
         <Stack.Screen name="pedido/[id]" options={{ title: 'Pedido' }} />
@@ -25,6 +27,7 @@ export default function RootLayout() {
         <Stack.Screen name="pedido/pago" options={{ presentation: 'modal', title: 'Pago' }} />
         <Stack.Screen name="proveedor/editar" options={{ presentation: 'modal', title: 'Proveedor' }} />
       </Stack>
+      </AuthGate>
     </ThemeProvider>
   );
 }

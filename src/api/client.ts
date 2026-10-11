@@ -1,4 +1,4 @@
-/** Thin JSON client for the Worker API (same origin, protected by Cloudflare Access). */
+/** Thin JSON client for the Worker API (same origin, HttpOnly session cookie). */
 
 export class ApiError extends Error {
   constructor(
@@ -9,8 +9,18 @@ export class ApiError extends Error {
   }
 }
 
-const SESSION_EXPIRED = 'Tu sesión ha caducado. Recarga la página para volver a entrar.';
 const OFFLINE = 'Sin conexión con el servidor. Comprueba tu conexión a Internet e inténtalo de nuevo.';
+
+type Listener = () => void;
+const unauthorizedListeners = new Set<Listener>();
+
+/** The sign-in gate subscribes here to show the login screen when the session expires. */
+export function onUnauthorized(listener: Listener): () => void {
+  unauthorizedListeners.add(listener);
+  return () => {
+    unauthorizedListeners.delete(listener);
+  };
+}
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -20,8 +30,6 @@ export async function apiRequest<T>(method: Method, path: string, body?: unknown
     response = await fetch(`/api${path}`, {
       method,
       credentials: 'same-origin',
-      // An expired Access session answers with a redirect to the login page: surface it instead of following it.
-      redirect: 'manual',
       headers: body === undefined ? { Accept: 'application/json' } : { Accept: 'application/json', 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
@@ -29,14 +37,14 @@ export async function apiRequest<T>(method: Method, path: string, body?: unknown
     throw new ApiError(0, OFFLINE);
   }
 
-  if (response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400)) {
-    throw new ApiError(401, SESSION_EXPIRED);
-  }
   const isJson = (response.headers.get('Content-Type') ?? '').includes('application/json');
-  if (!isJson) throw new ApiError(response.status, response.ok ? SESSION_EXPIRED : `Error del servidor (${response.status})`);
-
+  if (!isJson) throw new ApiError(response.status, `Error del servidor (${response.status})`);
   const payload = (await response.json()) as { data?: T; error?: string };
-  if (!response.ok) throw new ApiError(response.status, payload.error ?? `Error del servidor (${response.status})`);
+  if (!response.ok) {
+    // Login failures are handled by the login form itself; any other 401 means the session expired.
+    if (response.status === 401 && path !== '/login') unauthorizedListeners.forEach((listener) => listener());
+    throw new ApiError(response.status, payload.error ?? `Error del servidor (${response.status})`);
+  }
   return payload.data as T;
 }
 

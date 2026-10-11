@@ -26,11 +26,7 @@
   "triggers": {
     "crons": ["7 * * * *"]
   },
-  // ALLOWED_EMAILS (comma-separated Access identities allowed to use the API) is a Worker secret,
-  // kept out of this public repository: `npx wrangler secret put ALLOWED_EMAILS`.
-  "vars": {
-    // Filled in after enabling Cloudflare Access (see README). Empty = API closed.
-    "ACCESS_TEAM_DOMAIN": "",
-    "ACCESS_AUD": ""
-  }
+  // Sign-in password: Worker secret APP_PASSWORD (min. 10 characters), never in this repository:
+  //   npx wrangler secret put APP_PASSWORD
+  // Without it the API stays closed.
 }

@@ -12,7 +12,7 @@ import {
   parseSupplierInput,
 } from './validate';
 
-type Handler = (ctx: { params: string[]; request: Request; db: D1Database; email: string }) => Promise<Response>;
+type Handler = (ctx: { params: string[]; request: Request; db: D1Database }) => Promise<Response>;
 type Route = readonly [method: string, pattern: RegExp, handler: Handler];
 
 const ID = '(\\d+)';
@@ -25,8 +25,6 @@ async function orThrow<T>(promise: Promise<T | null>, what: string): Promise<T> 
 }
 
 const routes: readonly Route[] = [
-  ['GET', path('/me'), async ({ email }) => json({ email })],
-
   // Suppliers
   ['GET', path('/suppliers'), async ({ db }) => json(await repo.listSuppliers(db))],
   ['POST', path('/suppliers'), async ({ db, request }) => json({ id: await repo.createSupplier(db, parseSupplierInput(await readJson(request))) }, 201)],

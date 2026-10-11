@@ -37,6 +37,16 @@ export interface OrderDetailRaw {
 
 type Created = { id: number };
 
+// Session
+export interface SessionState {
+  readonly authenticated: boolean;
+  /** false when the server has no APP_PASSWORD yet (the API is closed). */
+  readonly configured: boolean;
+}
+export const getSession = () => apiRequest<SessionState>('GET', '/session');
+export const login = (password: string) => apiRequest('POST', '/login', { password });
+export const logout = () => apiRequest('POST', '/logout', {});
+
 // Suppliers
 export const listSuppliers = () => apiRequest<Supplier[]>('GET', '/suppliers');
 export const getSupplier = (id: number) => getOrNull<Supplier>(`/suppliers/${id}`);

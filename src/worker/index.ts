@@ -1,61 +1,101 @@
-import { accessKeyResolver, parseAllowedEmails, readAccessToken, verifyAccessJwt } from './auth';
 import { refreshFxIfStale } from './fx';
-import { assertSameOrigin, errorResponse, HttpError } from './http';
+import { assertSameOrigin, errorResponse, HttpError, json, readJson } from './http';
 import { matchRoute } from './routes';
+import {
+  clearFailedLogins,
+  clearSessionCookie,
+  createSessionToken,
+  isPasswordConfigured,
+  loginRetryAfter,
+  passwordMatches,
+  readSessionCookie,
+  recordFailedLogin,
+  sessionCookie,
+  verifySessionToken,
+} from './session';
 
 export interface WorkerEnv {
   readonly DB: D1Database;
   readonly ASSETS: Fetcher;
-  readonly ALLOWED_EMAILS: string;
-  readonly ACCESS_TEAM_DOMAIN: string;
-  readonly ACCESS_AUD: string;
-  /** Local development only (.dev.vars): skips Cloudflare Access. Never set in production. */
+  /** Worker secret: `npx wrangler secret put APP_PASSWORD` (min. 10 characters). */
+  readonly APP_PASSWORD?: string;
+  /** Local development only (.dev.vars): skips sign-in on localhost. Never set in production. */
   readonly DEV_BYPASS_AUTH?: string;
 }
 
-async function authenticate(request: Request, env: WorkerEnv): Promise<{ email: string } | Response> {
-  if (env.DEV_BYPASS_AUTH === '1' && new URL(request.url).hostname === 'localhost') return { email: 'dev@localhost' };
-  const teamDomain = env.ACCESS_TEAM_DOMAIN?.trim();
-  const aud = env.ACCESS_AUD?.trim();
-  // Closed by default: without Access configured, nobody can read or write data.
-  if (!teamDomain || !aud) {
-    return errorResponse(503, 'El acceso todavía no está configurado (Cloudflare Access). Consulta el README.');
+const NOT_CONFIGURED =
+  'Falta configurar la contraseña de la app (secreto APP_PASSWORD, mínimo 10 caracteres). Consulta el README.';
+const nowSeconds = () => Math.floor(Date.now() / 1000);
+
+function withCookie(response: Response, cookie: string): Response {
+  const headers = new Headers(response.headers);
+  headers.set('Set-Cookie', cookie);
+  return new Response(response.body, { status: response.status, headers });
+}
+
+function isDevBypass(request: Request, env: WorkerEnv): boolean {
+  return env.DEV_BYPASS_AUTH === '1' && new URL(request.url).hostname === 'localhost';
+}
+
+function isConfigured(request: Request, env: WorkerEnv): boolean {
+  return isDevBypass(request, env) || isPasswordConfigured(env.APP_PASSWORD);
+}
+
+async function isAuthenticated(request: Request, env: WorkerEnv): Promise<boolean> {
+  if (isDevBypass(request, env)) return true;
+  const token = readSessionCookie(request);
+  return Boolean(token && isPasswordConfigured(env.APP_PASSWORD) && (await verifySessionToken(token, env.APP_PASSWORD)));
+}
+
+async function login(request: Request, env: WorkerEnv): Promise<Response> {
+  if (!isPasswordConfigured(env.APP_PASSWORD)) return errorResponse(503, NOT_CONFIGURED);
+  const body = await readJson(request);
+  const candidate = typeof body === 'object' && body !== null ? (body as { password?: unknown }).password : undefined;
+  if (typeof candidate !== 'string' || candidate.length === 0 || candidate.length > 200) {
+    return errorResponse(400, 'Escribe la contraseña');
   }
-  const token = readAccessToken(request);
-  if (!token) return errorResponse(401, 'Inicia sesión para continuar');
-  const result = await verifyAccessJwt(
-    token,
-    { teamDomain, aud, allowedEmails: parseAllowedEmails(env.ALLOWED_EMAILS) },
-    accessKeyResolver(teamDomain),
-  );
-  if ('error' in result) {
-    console.warn('Access denied:', result.error); // detail in logs only; the client gets a generic message
-    return errorResponse(403, 'Acceso denegado');
+  const ip = request.headers.get('CF-Connecting-IP') ?? 'desconocida';
+  const wait = await loginRetryAfter(env.DB, ip, nowSeconds());
+  if (wait > 0) return errorResponse(429, `Demasiados intentos. Vuelve a probar en ${Math.ceil(wait / 60)} minutos.`);
+
+  if (!(await passwordMatches(candidate, env.APP_PASSWORD))) {
+    await recordFailedLogin(env.DB, ip, nowSeconds());
+    return errorResponse(401, 'Contraseña incorrecta');
   }
-  return result;
+  await clearFailedLogins(env.DB, ip);
+  return withCookie(json({ ok: true }), sessionCookie(await createSessionToken(env.APP_PASSWORD)));
+}
+
+/** /api/session, /api/login and /api/logout work without a session. */
+async function handleAuthRoutes(request: Request, env: WorkerEnv, pathname: string): Promise<Response | null> {
+  if (pathname === '/api/session' && request.method === 'GET') {
+    return json({ authenticated: await isAuthenticated(request, env), configured: isConfigured(request, env) });
+  }
+  if (pathname === '/api/logout' && request.method === 'POST') {
+    assertSameOrigin(request);
+    return withCookie(json({ ok: true }), clearSessionCookie());
+  }
+  if (pathname === '/api/login' && request.method === 'POST') return login(request, env);
+  return null;
 }
 
 async function handleApi(request: Request, env: WorkerEnv, ctx: ExecutionContext): Promise<Response> {
-  let auth: { email: string } | Response;
-  try {
-    auth = await authenticate(request, env);
-  } catch (e: unknown) {
-    console.error('Auth error', e instanceof Error ? e.message : String(e));
-    return errorResponse(401, 'No se pudo verificar la sesión. Recarga la página.');
-  }
-  if (auth instanceof Response) return auth;
-
   const { pathname } = new URL(request.url);
-  const route = matchRoute(request.method, pathname);
-  if (route === null) return errorResponse(404, 'Ruta no encontrada');
-  if (route === 'method') return errorResponse(405, 'Método no permitido');
-
-  // Keep the exchange rate fresh whenever the app is used (cheap no-op when recent).
-  if (request.method === 'GET') ctx.waitUntil(refreshFxIfStale(env.DB).catch(() => undefined));
-
   try {
+    const authResponse = await handleAuthRoutes(request, env, pathname);
+    if (authResponse) return authResponse;
+
+    if (!isConfigured(request, env)) return errorResponse(503, NOT_CONFIGURED);
+    if (!(await isAuthenticated(request, env))) return errorResponse(401, 'Inicia sesión para continuar');
+
+    const route = matchRoute(request.method, pathname);
+    if (route === null) return errorResponse(404, 'Ruta no encontrada');
+    if (route === 'method') return errorResponse(405, 'Método no permitido');
     if (request.method !== 'GET') assertSameOrigin(request);
-    return await route.handler({ params: route.params, request, db: env.DB, email: auth.email });
+
+    // Keep the exchange rate fresh whenever the app is used (cheap no-op when recent).
+    if (request.method === 'GET') ctx.waitUntil(refreshFxIfStale(env.DB).catch(() => undefined));
+    return await route.handler({ params: route.params, request, db: env.DB });
   } catch (e: unknown) {
     if (e instanceof HttpError) return errorResponse(e.status, e.message);
     const message = e instanceof Error ? e.message : String(e);

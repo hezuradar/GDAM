@@ -6,7 +6,7 @@ import { ChipGroup } from '@/components/ui/ChipGroup';
 import { Card, ErrorView, FormScroll, InfoRow, LoadingView, SectionHeader } from '@/components/ui/Layout';
 import { TextField } from '@/components/ui/TextField';
 import { exportBackupJson } from '@/api/data';
-import { getSettings, refreshFxRate, saveSettings, type AppSettings } from '@/api/data';
+import { getSettings, logout, refreshFxRate, saveSettings, type AppSettings } from '@/api/data';
 import { todayIso } from '@/domain/dates';
 import { formatDate } from '@/domain/exportText';
 import { formatRate, parseRate } from '@/domain/money';
@@ -99,6 +99,16 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (e: unknown) {
+      showError('No se pudo cerrar la sesión', e);
+      return;
+    }
+    window.location.replace('/');
+  };
+
   const handleBackup = async () => {
     try {
       const json = await exportBackupJson();
@@ -182,6 +192,12 @@ export default function SettingsScreen() {
           cuenta. Si quieres una copia propia, descárgala aquí (en el móvil puedes enviarla a Archivos, Drive o al correo).
         </Text>
         <Button variant="secondary" label="Guardar copia (.json)" icon="download-outline" onPress={handleBackup} />
+      </Card>
+
+      <SectionHeader title="Sesión" />
+      <Card>
+        <Text style={styles.body}>La sesión dura 30 días en este dispositivo. Ciérrala si usas un ordenador compartido.</Text>
+        <Button variant="secondary" label="Cerrar sesión" icon="log-out-outline" onPress={handleLogout} />
       </Card>
     </FormScroll>
   );

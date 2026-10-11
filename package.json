@@ -50,7 +50,7 @@
         "preset": "jest-expo",
         "testEnvironment": "node",
         "testMatch": ["<rootDir>/src/worker/**/__tests__/**/*.test.ts"],
-        "collectCoverageFrom": ["<rootDir>/src/worker/auth.ts", "<rootDir>/src/worker/validate.ts"]
+        "collectCoverageFrom": ["<rootDir>/src/worker/session.ts", "<rootDir>/src/worker/validate.ts"]
       }
     ],
     "coverageThreshold": {

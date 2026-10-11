@@ -83,7 +83,7 @@ Los importes se guardan en céntimos enteros y el cambio como «1 € = X US$» 
 
 ```bash
 npm install
-cp .dev.vars.example .dev.vars   # solo en local: salta el inicio de sesión en localhost
+cp .dev.vars.example .dev.vars   # solo en local: salta la contraseña en localhost
 npm run dev                      # compila la web, prepara la D1 local y arranca http://localhost:8787
 npm test                         # tests (app + servidor)
 npm run typecheck                # TypeScript (app + servidor)
