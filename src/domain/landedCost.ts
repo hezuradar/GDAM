@@ -40,41 +40,75 @@ export interface ProductCost extends ProductSource {
   readonly usesTheoreticalCost: boolean;
 }
 
+interface CostBase {
+  readonly rates: FxRates;
+  /** Real unit price, or the theoretical value (order currency) for zero-price / unpriced lines. */
+  readonly baseUnitCents: number | null;
+  readonly usesTheoreticalCost: boolean;
+}
+
+function costBase(r: ProductSource, marketRates: FxRates): CostBase {
+  const rates = withUsdRate(marketRates, r.fxRateMicros);
+  const hasRealPrice = r.unitPriceCents !== null && r.unitPriceCents > 0;
+  const theoretical =
+    !hasRealPrice && r.theoreticalCostCents !== null
+      ? convert(r.theoreticalCostCents, r.theoreticalCurrency ?? r.currency, r.currency, rates)
+      : null;
+  return { rates, baseUnitCents: hasRealPrice ? r.unitPriceCents : (theoretical ?? r.unitPriceCents), usesTheoreticalCost: theoretical !== null };
+}
+
 /**
- * Landed cost per unit: each order's shipping + customs (converted to the order currency)
- * is split among its priced lines in proportion to their value, then divided by quantity.
+ * Landed cost per unit: each order's shipping + customs (converted to the order currency) is split
+ * among its lines in proportion to their value, then divided by quantity. A zero-price replacement
+ * counts with its theoretical value, so it carries its share too (none until it has one). Computed
+ * on every read, so shipping added later is spread at once.
  */
 export function computeProductCosts(rows: readonly ProductSource[], marketRates: FxRates): ProductCost[] {
-  const goodsByOrder = new Map<number, number>();
-  for (const r of rows) {
-    if (r.unitPriceCents !== null) goodsByOrder.set(r.orderId, (goodsByOrder.get(r.orderId) ?? 0) + r.quantity * r.unitPriceCents);
-  }
-  return rows.map((r) => {
-    const rates = withUsdRate(marketRates, r.fxRateMicros);
-    const goods = goodsByOrder.get(r.orderId) ?? 0;
-    const hasRealPrice = r.unitPriceCents !== null && r.unitPriceCents > 0;
-    const theoretical =
-      !hasRealPrice && r.theoreticalCostCents !== null
-        ? convert(r.theoreticalCostCents, r.theoreticalCurrency ?? r.currency, r.currency, rates)
-        : null;
-    const baseUnitCents = hasRealPrice ? r.unitPriceCents : (theoretical ?? r.unitPriceCents);
+  const bases = rows.map((r) => costBase(r, marketRates));
+  const valueByOrder = new Map<number, number>();
+  rows.forEach((r, i) => {
+    const base = bases[i].baseUnitCents;
+    if (base !== null) valueByOrder.set(r.orderId, (valueByOrder.get(r.orderId) ?? 0) + r.quantity * base);
+  });
+  return rows.map((r, i) => {
+    const { rates, baseUnitCents, usesTheoreticalCost } = bases[i];
     if (baseUnitCents === null || r.quantity <= 0) {
       return { ...r, rates, allocatedPerUnitCents: null, landedUnitCents: null, usesTheoreticalCost: false };
     }
-    // Shipping and customs follow the real paid value: zero-price replacements take no share.
     const extra =
       convert(r.shippingCents, r.shippingCurrency, r.currency, rates) +
       convert(r.customsCents, r.customsCurrency, r.currency, rates);
-    const lineValue = r.quantity * (r.unitPriceCents ?? 0);
-    const allocatedPerUnitCents = goods > 0 ? Math.round((extra * lineValue) / goods / r.quantity) : 0;
-    return {
-      ...r,
-      rates,
-      allocatedPerUnitCents,
-      landedUnitCents: baseUnitCents + allocatedPerUnitCents,
-      usesTheoreticalCost: theoretical !== null,
-    };
+    const orderValue = valueByOrder.get(r.orderId) ?? 0;
+    const allocatedPerUnitCents = orderValue > 0 ? Math.round((extra * r.quantity * baseUnitCents) / orderValue / r.quantity) : 0;
+    return { ...r, rates, allocatedPerUnitCents, landedUnitCents: baseUnitCents + allocatedPerUnitCents, usesTheoreticalCost };
   });
+}
+
+/**
+ * Landed unit cost (display currency) of one line while its theoretical value is being typed:
+ * the whole order is recomputed, because that value also changes how shipping is shared.
+ * Null when the line is not among the rows or its cost is still unknown.
+ */
+export function previewLandedCost(
+  rows: readonly ProductSource[],
+  marketRates: FxRates,
+  lineId: number,
+  theoreticalCents: number | null,
+  theoreticalCurrency: Currency,
+  display: Currency,
+): number | null {
+  const target = rows.find((r) => r.lineId === lineId);
+  if (!target) return null;
+  const orderRows = rows
+    .filter((r) => r.orderId === target.orderId)
+    .map((r) =>
+      r.lineId === lineId
+        ? { ...r, theoreticalCostCents: theoreticalCents, theoreticalCurrency: theoreticalCents === null ? null : theoreticalCurrency }
+        : r,
+    );
+  const line = computeProductCosts(orderRows, marketRates).find((p) => p.lineId === lineId);
+  if (!line || line.landedUnitCents === null) return null;
+  return convert(line.landedUnitCents, line.currency, display, line.rates);
 }
 
 /** 2500 → "25 %", 1250 → "12,5 %". */

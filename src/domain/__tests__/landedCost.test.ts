@@ -2,6 +2,7 @@ import {
   computeProductCosts,
   formatMargin,
   marginFromSalePrice,
+  previewLandedCost,
   productSaleInfo,
   salePriceFromMargin,
   type ProductSource,
@@ -33,7 +34,8 @@ const row = (overrides: Partial<ProductSource>): ProductSource => ({
 });
 
 describe('theoretical cost for zero-price replacements', () => {
-  it('uses the theoretical value (converted) when the order price is 0, without taking shipping', () => {
+  it('uses the theoretical value (converted) and gives the replacement its share of shipping by that value', () => {
+    // valores: pagada 10 × 1,00 = 10,00 US$; reposición 10 × 2,20 (200 €) = 22,00 US$ → envío 5,00 repartido 10/32 y 22/32
     const [paid, replacement] = computeProductCosts(
       [
         row({ lineId: 1, unitPriceCents: 100, shippingCents: 500 }),
@@ -41,8 +43,28 @@ describe('theoretical cost for zero-price replacements', () => {
       ],
       RATE,
     );
-    expect(paid).toMatchObject({ allocatedPerUnitCents: 50, landedUnitCents: 150, usesTheoreticalCost: false });
-    expect(replacement).toMatchObject({ unitPriceCents: 0, allocatedPerUnitCents: 0, landedUnitCents: 220, usesTheoreticalCost: true });
+    expect(paid).toMatchObject({ allocatedPerUnitCents: 16, landedUnitCents: 116, usesTheoreticalCost: false });
+    expect(replacement).toMatchObject({ unitPriceCents: 0, allocatedPerUnitCents: 34, landedUnitCents: 254, usesTheoreticalCost: true });
+  });
+
+  it('gives no shipping to a replacement until it has a theoretical value', () => {
+    const [paid, replacement] = computeProductCosts(
+      [row({ lineId: 1, unitPriceCents: 100, shippingCents: 500 }), row({ lineId: 2, unitPriceCents: 0, shippingCents: 500 })],
+      RATE,
+    );
+    expect(paid).toMatchObject({ allocatedPerUnitCents: 50, landedUnitCents: 150 });
+    expect(replacement).toMatchObject({ allocatedPerUnitCents: 0, landedUnitCents: 0 });
+  });
+
+  it('previews the landed cost of a line with a theoretical value being typed', () => {
+    const rows = [
+      row({ lineId: 1, unitPriceCents: 100, shippingCents: 500 }),
+      row({ lineId: 2, unitPriceCents: 0, shippingCents: 500 }),
+    ];
+    expect(previewLandedCost(rows, RATE, 2, 220, 'USD', 'USD')).toBe(254);
+    expect(previewLandedCost(rows, RATE, 2, 200, 'EUR', 'EUR')).toBe(231); // 254 US$ → 2,31 €
+    expect(previewLandedCost(rows, RATE, 2, null, 'USD', 'USD')).toBe(0);
+    expect(previewLandedCost(rows, RATE, 99, 100, 'USD', 'USD')).toBeNull();
   });
 
   it('also covers lines with a pending price', () => {

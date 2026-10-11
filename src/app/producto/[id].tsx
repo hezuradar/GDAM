@@ -12,11 +12,13 @@ import {
   computeProductCosts,
   formatMargin,
   marginFromSalePrice,
+  previewLandedCost,
   productSaleInfo,
   salePriceFromMargin,
   type ProductCost,
+  type ProductSource,
 } from '@/domain/landedCost';
-import { centsToInput, convert, currencySymbol, formatMoney, marketRates, parseAmount, parseDecimal } from '@/domain/money';
+import { centsToInput, convert, currencySymbol, formatMoney, marketRates, parseAmount, parseDecimal, type FxRates } from '@/domain/money';
 import { CURRENCIES, type Currency } from '@/domain/types';
 import { CURRENCY_LABEL } from '@/i18n/es';
 import { useLoader } from '@/hooks/useLoader';
@@ -36,11 +38,15 @@ const parseMarginBp = (text: string): number | null => {
 export default function ProductPricingScreen() {
   const lineId = parseIdParam(useLocalSearchParams<{ id: string }>().id) ?? 0;
   const styles = useThemedStyles(makeStyles);
-  const load = useCallback(async (): Promise<ProductCost | null> => {
+  // The other lines of the order are kept too: a theoretical value changes how shipping is shared.
+  const load = useCallback(async (): Promise<{ product: ProductCost; orderRows: ProductSource[]; market: FxRates } | null> => {
     const { products, settings } = await listProducts();
-    return computeProductCosts(products, marketRates(settings)).find((p) => p.lineId === lineId) ?? null;
+    const market = marketRates(settings);
+    const product = computeProductCosts(products, market).find((p) => p.lineId === lineId);
+    return product ? { product, orderRows: products.filter((p) => p.orderId === product.orderId), market } : null;
   }, [lineId]);
-  const { data: product, error, loading, reload } = useLoader(load);
+  const { data, error, loading, reload } = useLoader(load);
+  const product = data?.product ?? null;
   const [currency, setCurrency] = useState<Currency>('EUR');
   const [saleText, setSaleText] = useState('');
   const [marginText, setMarginText] = useState('');
@@ -54,12 +60,10 @@ export default function ProductPricingScreen() {
   // Zero-price replacements (or lines without price) are costed with a theoretical value.
   const needsTheoretical = !!product && (product.unitPriceCents === null || product.unitPriceCents === 0);
   const theoreticalCents = theoreticalText.trim() === '' ? null : parseAmount(theoreticalText);
-  const allocatedDisplay = product ? convert(product.allocatedPerUnitCents ?? 0, product.currency, currency, product.rates) : 0;
-  const landed = needsTheoretical
-    ? theoreticalCents === null
-      ? null
-      : theoreticalCents + allocatedDisplay
-    : (info?.landedUnitCents ?? null);
+  // Landed cost with the value being typed, recomputing the order's shipping share live.
+  const previewLanded = (value: number | null): number | null =>
+    data && value !== null ? previewLandedCost(data.orderRows, data.market, lineId, value, currency, currency) : null;
+  const landed = needsTheoretical ? previewLanded(theoreticalCents) : (info?.landedUnitCents ?? null);
 
   // Seed the fields once from what is stored (later focus reloads must not discard typing).
   useEffect(() => {
@@ -89,7 +93,7 @@ export default function ProductPricingScreen() {
     setTheoreticalText(text);
     setTheoreticalEdited(true);
     const value = text.trim() === '' ? null : parseAmount(text);
-    const nextLanded = value === null ? null : value + allocatedDisplay;
+    const nextLanded = previewLanded(value);
     if (nextLanded === null) return;
     // Keep whichever field the user drives and recompute the other one.
     if (edited === 'sale') {
@@ -201,7 +205,11 @@ export default function ProductPricingScreen() {
             label={needsTheoretical ? 'Valor teórico por unidad' : 'Precio por unidad'}
             value={needsTheoretical ? formatMoney(theoreticalCents ?? 0, currency) : money(product.unitPriceCents ?? 0)}
           />
-          <InfoRow icon="airplane-outline" label="Envío + aduanas (proporcional)" value={`+ ${money(product.allocatedPerUnitCents ?? 0)}`} />
+          <InfoRow
+            icon="airplane-outline"
+            label="Envío + aduanas (proporcional)"
+            value={`+ ${needsTheoretical ? formatMoney(landed - (theoreticalCents ?? 0), currency) : money(product.allocatedPerUnitCents ?? 0)}`}
+          />
           <InfoRow icon="calculator-outline" label="Coste unitario total" value={formatMoney(landed, currency)} isStrong />
         </Card>
       )}
