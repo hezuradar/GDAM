@@ -99,6 +99,15 @@ export function convert(cents: number, from: Currency, to: Currency, rates: FxRa
 }
 
 /**
+ * Re-expresses a typed amount when its currency is switched in a form, so "35" US$ becomes
+ * "31,82" € instead of 35 €. Empty, invalid or same-currency text is left as typed.
+ */
+export function convertInput(text: string, from: Currency, to: Currency, rates: FxRates): string {
+  const cents = parseAmount(text);
+  return cents === null || from === to ? text : centsToInput(convert(cents, from, to, rates));
+}
+
+/**
  * Amount to show when the user picks a display currency (null = keep the original).
  * Display only: stored amounts never change.
  */

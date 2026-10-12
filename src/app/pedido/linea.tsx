@@ -8,7 +8,7 @@ import { TextField } from '@/components/ui/TextField';
 import { deleteLine, getLine, saveLine } from '@/api/data';
 import { getOrder } from '@/api/data';
 import { formatQuantity } from '@/domain/exportText';
-import { centsToInput, parseAmount, parseDecimal } from '@/domain/money';
+import { centsToInput, currencySymbol, parseAmount, parseDecimal } from '@/domain/money';
 import type { Currency } from '@/domain/types';
 import { goBack, parseIdParam } from '@/lib/params';
 import { typography, useThemedStyles, type Theme } from '@/theme/theme';
@@ -90,7 +90,7 @@ export default function LineFormScreen() {
       <TextField label="Tipo de pieza" value={pieceType} onChangeText={setPieceType} error={errors.pieceType} placeholder="tornillo, placa, tubo…" />
       <TextField label="Medidas" value={measurements} onChangeText={setMeasurements} placeholder="M8x40, 200x300x5…" autoCapitalize="none" />
       <TextField
-        label={`Precio por pieza (${currency})`}
+        label={`Precio por pieza (${currencySymbol(currency)})`}
         value={price}
         onChangeText={setPrice}
         keyboardType="decimal-pad"

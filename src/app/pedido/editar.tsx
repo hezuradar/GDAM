@@ -11,7 +11,7 @@ import { getOrder, saveOrder } from '@/api/data';
 import { getSettings } from '@/api/data';
 import { listSuppliers } from '@/api/data';
 import { todayIso } from '@/domain/dates';
-import { centsToInput, formatRate, parseAmount, parseRate } from '@/domain/money';
+import { centsToInput, convertInput, currencySymbol, formatRate, marketRates, parseAmount, parseRate, withUsdRate, type FxRates } from '@/domain/money';
 import { CURRENCIES, ORDER_STATUSES, type Currency, type OrderStatus, type Supplier } from '@/domain/types';
 import { ORDER_STATUS_ICON, ORDER_STATUS_LABEL } from '@/i18n/es';
 import { goBack, parseIdParam } from '@/lib/params';
@@ -71,13 +71,22 @@ export default function OrderFormScreen() {
   const [isSaving, setSaving] = useState(false);
   const [defaultRate, setDefaultRate] = useState('');
   const [loadedCurrency, setLoadedCurrency] = useState<Currency | null>(null);
+  const [market, setMarket] = useState<FxRates | null>(null);
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm((f) => ({ ...f, [key]: value }));
+  /** Switching the currency of shipping or customs converts the typed amount (order rate if set, else market). */
+  const changeAmountCurrency = (amountKey: 'shipping' | 'customs', currencyKey: 'shippingCurrency' | 'customsCurrency', next: Currency) =>
+    setForm((f) => {
+      const rates = market ? withUsdRate(market, parseRate(f.rate)) : null;
+      const amount = rates ? convertInput(f[amountKey], f[currencyKey], next, rates) : f[amountKey];
+      return { ...f, [amountKey]: amount, [currencyKey]: next };
+    });
 
   useEffect(() => {
     const load = async () => {
       const [list, settings, order] = await Promise.all([listSuppliers(), getSettings(), id ? getOrder(id) : null]);
       setSuppliers(list);
       setDefaultRate(formatRate(settings.fxRateMicros));
+      setMarket(marketRates(settings));
       if (id !== null && !order) {
         showError('Pedido no encontrado', new Error('Puede que se haya eliminado.'));
         goBack();
@@ -179,10 +188,10 @@ export default function OrderFormScreen() {
 
       <SectionHeader title="Envío y aduanas" />
       <Card>
-        <TextField label="Coste de envío" value={form.shipping} onChangeText={(v) => set('shipping', v)} keyboardType="decimal-pad" placeholder="0,00" error={errors.shipping} hint="Déjalo vacío si aún no lo sabes" />
-        <ChipGroup<Currency> label="Moneda del envío" value={form.shippingCurrency} options={currencyOptions} onChange={(v) => set('shippingCurrency', v)} />
-        <TextField label="Aduanas" value={form.customs} onChangeText={(v) => set('customs', v)} keyboardType="decimal-pad" placeholder="0,00" error={errors.customs} />
-        <ChipGroup<Currency> label="Moneda de aduanas" value={form.customsCurrency} options={currencyOptions} onChange={(v) => set('customsCurrency', v)} />
+        <TextField label={`Coste de envío (${currencySymbol(form.shippingCurrency)})`} value={form.shipping} onChangeText={(v) => set('shipping', v)} keyboardType="decimal-pad" placeholder="0,00" error={errors.shipping} hint="Déjalo vacío si aún no lo sabes" />
+        <ChipGroup<Currency> label="Moneda del envío" value={form.shippingCurrency} options={currencyOptions} onChange={(v) => changeAmountCurrency('shipping', 'shippingCurrency', v)} />
+        <TextField label={`Aduanas (${currencySymbol(form.customsCurrency)})`} value={form.customs} onChangeText={(v) => set('customs', v)} keyboardType="decimal-pad" placeholder="0,00" error={errors.customs} />
+        <ChipGroup<Currency> label="Moneda de aduanas" value={form.customsCurrency} options={currencyOptions} onChange={(v) => changeAmountCurrency('customs', 'customsCurrency', v)} />
         <TextField label="Transportista" value={form.carrier} onChangeText={(v) => set('carrier', v)} placeholder="DHL, FedEx, SF Express…" />
         <TextField label="Número de seguimiento" value={form.trackingNumber} onChangeText={(v) => set('trackingNumber', v)} autoCapitalize="characters" autoCorrect={false} />
       </Card>

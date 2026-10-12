@@ -1,4 +1,4 @@
-import { convert, currencySymbol, displayAmount, formatMoney, formatRate, marketRates, parseAmount, parseRate, withUsdRate } from '../money';
+import { convert, convertInput, currencySymbol, displayAmount, formatMoney, formatRate, marketRates, parseAmount, parseRate, withUsdRate } from '../money';
 
 describe('parseAmount', () => {
   it.each([
@@ -116,5 +116,20 @@ describe('Indian rupee', () => {
 
   it('throws when the rupee rate is missing', () => {
     expect(() => convert(100, 'INR', 'EUR', { usdMicros: 1_100_000, inrMicros: 0 })).toThrow();
+  });
+});
+
+describe('convertInput', () => {
+  const rates = { usdMicros: 1_100_000, inrMicros: 100_000_000 };
+
+  it('re-expresses a typed amount in the new currency', () => {
+    expect(convertInput('35,00', 'USD', 'EUR', rates)).toBe('31,82');
+    expect(convertInput('10', 'EUR', 'INR', rates)).toBe('1000,00');
+  });
+
+  it('leaves empty, invalid or same-currency text as typed', () => {
+    expect(convertInput('', 'USD', 'EUR', rates)).toBe('');
+    expect(convertInput('abc', 'USD', 'EUR', rates)).toBe('abc');
+    expect(convertInput('12,5', 'EUR', 'EUR', rates)).toBe('12,5');
   });
 });

@@ -9,7 +9,7 @@ import { Card, EmptyState, ErrorView, FormScroll, InfoRow, LoadingView } from '@
 import { TextField } from '@/components/ui/TextField';
 import { deletePayment, getPayment, savePayment } from '@/api/data';
 import { todayIso } from '@/domain/dates';
-import { centsToInput, convert, formatMoney, formatRate, parseAmount, parseRate, withUsdRate } from '@/domain/money';
+import { centsToInput, convert, convertInput, currencySymbol, formatMoney, formatRate, parseAmount, parseRate, withUsdRate } from '@/domain/money';
 import { CURRENCIES, PAYMENT_METHODS, type Currency, type PaymentMethod } from '@/domain/types';
 import { useOrderDetail } from '@/hooks/useOrderDetail';
 import { PAYMENT_METHOD_LABEL } from '@/i18n/es';
@@ -67,6 +67,12 @@ export default function PaymentFormScreen() {
   const fillPending = (fraction: number) =>
     setAmount(centsToInput(Math.round(convert(payment.pendingCents * fraction, order.currency, payCurrency, totals.rates))));
 
+  /** Switching the payment currency converts the typed amount (bank rate if typed, else the order's). */
+  const changePayCurrency = (next: Currency) => {
+    setAmount((typed) => convertInput(typed, payCurrency, next, withUsdRate(totals.rates, parseRate(rate))));
+    setCurrency(next);
+  };
+
   const handleSave = async () => {
     const found: Errors = {};
     if (amountCents === null || amountCents <= 0) found.amount = 'Introduce un importe mayor que 0';
@@ -105,14 +111,14 @@ export default function PaymentFormScreen() {
         <InfoRow label="Total del pedido" value={formatMoney(totals.totalCents, order.currency)} />
         <InfoRow label="Pendiente" value={formatMoney(payment.pendingCents, order.currency)} isStrong />
       </Card>
-      <TextField label={`Importe (${payCurrency})`} value={amount} onChangeText={setAmount} keyboardType="decimal-pad" error={errors.amount} autoFocus={id === null} />
+      <TextField label={`Importe (${currencySymbol(payCurrency)})`} value={amount} onChangeText={setAmount} keyboardType="decimal-pad" error={errors.amount} autoFocus={id === null} />
       {id === null && payment.pendingCents > 0 ? (
         <ButtonRow>
           <Button variant="secondary" label="Todo lo pendiente" onPress={() => fillPending(1)} accessibilityHint="Rellena el importe con el total pendiente" />
           <Button variant="secondary" label="50 %" onPress={() => fillPending(0.5)} accessibilityHint="Rellena la mitad de lo pendiente" />
         </ButtonRow>
       ) : null}
-      <ChipGroup<Currency> label="Moneda del pago" value={payCurrency} options={CURRENCIES.map((c) => ({ value: c, label: c }))} onChange={setCurrency} />
+      <ChipGroup<Currency> label="Moneda del pago" value={payCurrency} options={CURRENCIES.map((c) => ({ value: c, label: c }))} onChange={changePayCurrency} />
       {isForeign ? (
         <>
           {isEurUsdPair ? (
