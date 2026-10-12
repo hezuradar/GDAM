@@ -1,7 +1,7 @@
 import { productSaleInfo, type ProductCost } from './landedCost';
 import { convert, type FxRates } from './money';
 import type { ListLine, ListPayment } from './orderList';
-import { paidCents } from './payments';
+import { orderPaidCents } from './payments';
 import { orderTotals } from './totals';
 import type { Currency, Order, Supplier } from './types';
 
@@ -73,7 +73,7 @@ export function spendStats(source: SpendSource, display: Currency, now: Date = n
     const lines = linesByOrder.get(order.id) ?? [];
     const totals = orderTotals(order, lines, source.marketRates);
     const toDisplay = (cents: number) => convert(cents, order.currency, display, totals.rates);
-    const paid = paidCents(paymentsByOrder.get(order.id) ?? [], order.currency, totals.rates);
+    const paid = orderPaidCents(paymentsByOrder.get(order.id) ?? [], order.currency, totals.rates, totals.customsCents);
     const total = toDisplay(totals.totalCents);
 
     sums.total += total;

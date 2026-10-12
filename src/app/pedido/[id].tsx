@@ -156,7 +156,13 @@ export default function OrderDetailScreen() {
       <TotalsCard totals={totals} payment={payment} currency={order.currency} usesOrderRate={order.fxRateMicros !== null} />
 
       <SectionHeader title={`Pagos (${payments.length})`} icon="cash-outline" action={<IconButton icon="add-circle-outline" label="Registrar pago" onPress={() => go('/pedido/pago')} />} />
-      {payments.length > 0 ? <PaymentsList payments={payments} onPressPayment={(paymentId) => go('/pedido/pago', { id: paymentId })} /> : null}
+      {payments.length > 0 || order.customsCents > 0 ? (
+        <PaymentsList
+          payments={payments}
+          customs={order.customsCents > 0 ? { cents: order.customsCents, currency: order.customsCurrency } : null}
+          onPressPayment={(paymentId) => go('/pedido/pago', { id: paymentId })}
+        />
+      ) : null}
       {payment.status !== 'pagado' ? <Button variant="secondary" icon="cash-outline" label="Registrar pago" onPress={() => go('/pedido/pago')} /> : null}
 
       <SectionHeader title="Acciones" icon="flash-outline" />

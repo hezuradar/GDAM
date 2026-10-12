@@ -1,6 +1,6 @@
 import type { FxRates } from './money';
 import type { OrderListItem } from './orderFilters';
-import { paidCents, paymentSummary, type PaymentMoneyFields } from './payments';
+import { orderPaidCents, paymentSummary, type PaymentMoneyFields } from './payments';
 import { orderTotals } from './totals';
 import type { Order, OrderLine, Payment } from './types';
 
@@ -32,7 +32,7 @@ export function buildOrderListItems(source: OrderListSource): OrderListItem[] {
   return source.orders.map((order) => {
     const lines = linesByOrder.get(order.id) ?? [];
     const totals = orderTotals(order, lines, source.marketRates);
-    const paid = paidCents(paymentsByOrder.get(order.id) ?? [], order.currency, totals.rates);
+    const paid = orderPaidCents(paymentsByOrder.get(order.id) ?? [], order.currency, totals.rates, totals.customsCents);
     const summary = paymentSummary(totals.totalCents, paid);
     const productText = lines.map((l) => `${l.pieceType} ${l.measurements}`).join(' ');
 

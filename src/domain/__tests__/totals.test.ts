@@ -1,5 +1,5 @@
 import { lineTotalCents, orderTotals } from '../totals';
-import { paidCents, paymentSummary } from '../payments';
+import { orderPaidCents, paidCents, paymentSummary } from '../payments';
 import type { Order, Payment } from '../types';
 
 const RATE = { usdMicros: 1_100_000, inrMicros: 100_000_000 }; // 1 EUR = 1.10 USD = 100 INR
@@ -93,5 +93,13 @@ describe('payments', () => {
 
   it('reports overpayment', () => {
     expect(paymentSummary(1000, 1200).overpaidCents).toBe(200);
+  });
+});
+
+describe('customs count as paid', () => {
+  it('adds the customs of the order (already paid when entered) to the payments', () => {
+    const payments = [{ amountCents: 1000, currency: 'EUR' as const, fxRateMicros: null }];
+    expect(orderPaidCents(payments, 'EUR', RATE, 700)).toBe(1700);
+    expect(orderPaidCents([], 'EUR', RATE, 0)).toBe(0);
   });
 });

@@ -56,8 +56,8 @@ describe('spendStats', () => {
       shippingCents: 1000,
       customsCents: 500,
       totalCents: 4500,
-      paidCents: 3000,
-      pendingCents: 1500,
+      paidCents: 3500, // pagos 30,00 € + aduanas 5,00 € (pagadas al introducirlas)
+      pendingCents: 1000,
       pieces: 35,
       pendingPriceLines: 1,
     });

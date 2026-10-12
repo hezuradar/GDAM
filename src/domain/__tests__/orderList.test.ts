@@ -47,6 +47,18 @@ describe('buildOrderListItems', () => {
     expect(items[1]).toMatchObject({ id: 2, supplierName: 'Tubos', totalCents: 0, paymentStatus: 'sin_pagar', lineCount: 0 });
   });
 
+  it('counts the customs of an order as already paid', () => {
+    const [withPayment, onlyCustoms] = buildOrderListItems({
+      orders: [order({ id: 1, shippingCents: 500, customsCents: 300 }), order({ id: 2, customsCents: 400 })],
+      lines: [{ orderId: 1, quantity: 1, unitPriceCents: 1000, pieceType: 'tubo', measurements: '' }],
+      payments: [{ orderId: 1, amountCents: 1000, currency: 'EUR', fxRateMicros: null }],
+      supplierNames: new Map(),
+      marketRates: { usdMicros: 1_000_000, inrMicros: 100_000_000 },
+    });
+    expect(withPayment).toMatchObject({ totalCents: 1800, pendingCents: 500, paymentStatus: 'parcial' });
+    expect(onlyCustoms).toMatchObject({ totalCents: 400, pendingCents: 0, paymentStatus: 'pagado' });
+  });
+
   it('uses a placeholder for unknown suppliers', () => {
     const [item] = buildOrderListItems({
       orders: [order({ supplierId: 99 })],

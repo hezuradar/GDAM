@@ -102,17 +102,30 @@ export function LinesList({ lines, currency, rates, onPressLine }: LinesListProp
   );
 }
 
-type PaymentsListProps = { payments: readonly Payment[]; onPressPayment: (id: number) => void };
+type PaymentsListProps = {
+  payments: readonly Payment[];
+  /** Customs of the order, already paid when entered (null when there are none). */
+  customs?: { cents: number; currency: Currency } | null;
+  onPressPayment: (id: number) => void;
+};
 
-export function PaymentsList({ payments, onPressPayment }: PaymentsListProps) {
+export function PaymentsList({ payments, customs = null, onPressPayment }: PaymentsListProps) {
   const styles = useThemedStyles(makeStyles);
+  const customsAmount = customs ? formatMoney(customs.cents, customs.currency) : null;
   return (
     <Card>
+      {customsAmount ? (
+        // Customs are paid when entered: shown as a payment, edited from the order itself.
+        <View accessible accessibilityLabel={`Aduanas ${customsAmount}, pagadas al introducirlas en el pedido`}>
+          <Text style={styles.lineTitle}>Aduanas · {customsAmount}</Text>
+          <Text style={styles.secondary}>Pagadas al introducirlas en el pedido</Text>
+        </View>
+      ) : null}
       {payments.map((p, index) => {
         const amount = formatMoney(p.amountCents, p.currency);
         const detail = [formatDate(p.paidOn), PAYMENT_METHOD_LABEL[p.method], p.note].filter(Boolean).join(' · ');
         return (
-          <View key={p.id} style={index > 0 ? styles.separated : undefined}>
+          <View key={p.id} style={index > 0 || customsAmount ? styles.separated : undefined}>
             <PressableRow onPress={() => onPressPayment(p.id)} accessibilityLabel={`Pago de ${amount}. ${detail}`} accessibilityHint="Editar pago">
               <Text style={styles.lineTitle}>{amount}</Text>
               <Text style={styles.secondary}>{detail}</Text>

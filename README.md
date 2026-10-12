@@ -26,7 +26,8 @@ pierden si se borra el navegador. Se puede **instalar en la pantalla de inicio**
 - **Precio por pieza** ahora o después: las líneas sin precio aparecen como «precio pendiente» y el total se marca como
   provisional.
 - **Monedas**: euro, dólar y rupia india (EUR, USD, INR) en pedidos, pagos, envío, aduanas y precios de venta.
-- **Envío y aduanas**, cada uno en su moneda, convertidos a la moneda del pedido. Si cambias la moneda de un
+- **Envío y aduanas**, cada uno en su moneda, convertidos a la moneda del pedido. Las aduanas se consideran pagadas al
+  introducirlas (se pagan al transportista o en la aduana): cuentan como pagado y no quedan pendientes con el proveedor. Si cambias la moneda de un
   pedido, también se convierten los precios de sus líneas.
 - **Cambio euro/dólar de mercado**: el servidor lo descarga cada hora (open.er-api.com y, como respaldo, currency-api). Se
   puede pasar a modo manual en Ajustes, o fijar un cambio propio en un pedido. Las fuentes gratuitas publican la

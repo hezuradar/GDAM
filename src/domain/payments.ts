@@ -25,6 +25,20 @@ export function paidCents(
   );
 }
 
+/**
+ * What has been paid for an order, in its currency: the payments plus the customs, which are paid
+ * (to the carrier or the customs office) when they are entered. Derived on every read, so it follows
+ * any later change to the customs amount.
+ */
+export function orderPaidCents(
+  payments: readonly PaymentMoneyFields[],
+  orderCurrency: Currency,
+  orderRates: FxRates,
+  customsCents: number,
+): number {
+  return paidCents(payments, orderCurrency, orderRates) + customsCents;
+}
+
 export function paymentSummary(totalCents: number, paid: number): PaymentSummary {
   const diff = totalCents - paid;
   const isPaid = totalCents > 0 && diff <= PAID_TOLERANCE_CENTS;
