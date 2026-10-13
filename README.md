@@ -23,6 +23,8 @@ pierden si se borra el navegador. Se puede **instalar en la pantalla de inicio**
   Las medidas `número x número x número` (con o sin mm/cm) se reconocen estén donde estén, y la cantidad puede ir al
   principio o al final («20 pieces», «50 uds»). Precios en €, US$ o rupias (₹, Rs, INR).
   Antes de guardar ves una vista previa. Las líneas dudosas se marcan para revisar y puedes desmarcar las que no quieras.
+- **Recepción**: al recibir un pedido se marca línea a línea lo que ha llegado (o todo de una vez), con cantidades
+  parciales; el pedido indica las piezas que faltan.
 - **Precio por pieza** ahora o después: las líneas sin precio aparecen como «precio pendiente» y el total se marca como
   provisional.
 - **Monedas**: euro, dólar y rupia india (EUR, USD, INR) en pedidos, pagos, envío, aduanas y precios de venta.

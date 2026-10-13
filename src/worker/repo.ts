@@ -3,7 +3,7 @@ import { plural } from '../domain/exportText';
 import { convert, marketRates, withUsdRate } from '../domain/money';
 import { CURRENCIES, type Currency, type Order, type OrderLine, type OrderStatus, type Payment, type Supplier } from '../domain/types';
 import { HttpError, notFound } from './http';
-import type { ImportInput, LineInput, LinePricesInput, LinePricingInput, OrderInput, PaymentInput, SettingsInput, SupplierInput } from './validate';
+import type { ImportInput, LineInput, LinePricesInput, LinePricingInput, ReceptionInput, OrderInput, PaymentInput, SettingsInput, SupplierInput } from './validate';
 
 /** Data access on Cloudflare D1. Every query is parameterised; multi-statement writes use batch() (atomic). */
 
@@ -17,7 +17,7 @@ interface OrderRow {
 }
 interface LineRow {
   id: number; order_id: number; position: number; quantity: number; piece_type: string;
-  measurements: string; unit_price_cents: number | null; raw_text: string;
+  measurements: string; unit_price_cents: number | null; raw_text: string; received_quantity: number | null;
 }
 interface PaymentRow {
   id: number; order_id: number; amount_cents: number; currency: Currency; paid_on: string;
@@ -33,7 +33,7 @@ const toOrder = (r: OrderRow): Order => ({
 });
 const toLine = (r: LineRow): OrderLine => ({
   id: r.id, orderId: r.order_id, position: r.position, quantity: r.quantity, pieceType: r.piece_type,
-  measurements: r.measurements, unitPriceCents: r.unit_price_cents, rawText: r.raw_text,
+  measurements: r.measurements, unitPriceCents: r.unit_price_cents, rawText: r.raw_text, receivedQuantity: r.received_quantity,
 });
 const toPayment = (r: PaymentRow): Payment => ({
   id: r.id, orderId: r.order_id, amountCents: r.amount_cents, currency: r.currency, paidOn: r.paid_on,
@@ -43,7 +43,7 @@ const toPayment = (r: PaymentRow): Payment => ({
 const SUPPLIER_COLUMNS = 'id, name, whatsapp, notes';
 const ORDER_COLUMNS = `id, supplier_id, order_date, status, currency, shipping_cents, shipping_currency,
   customs_cents, customs_currency, fx_rate_micros, carrier, tracking_number, notes`;
-const LINE_COLUMNS = 'id, order_id, position, quantity, piece_type, measurements, unit_price_cents, raw_text';
+const LINE_COLUMNS = 'id, order_id, position, quantity, piece_type, measurements, unit_price_cents, raw_text, received_quantity';
 const PAYMENT_COLUMNS = 'id, order_id, amount_cents, currency, paid_on, method, fx_rate_micros, note';
 
 async function all<T>(db: D1Database, sql: string, ...params: unknown[]): Promise<T[]> {
@@ -248,6 +248,25 @@ export async function importLines(db: D1Database, orderId: number, input: Import
   ];
   await db.batch(statements);
   return input.lines.length;
+}
+
+async function requireOrderLines(db: D1Database, orderId: number, lineIds: readonly number[]): Promise<void> {
+  await requireOrder(db, orderId);
+  const rows = await all<{ id: number }>(db, 'SELECT id FROM order_lines WHERE order_id = ?', orderId);
+  const ids = new Set(rows.map((r) => r.id));
+  if (lineIds.some((id) => !ids.has(id))) throw new HttpError(400, 'Alguna línea no pertenece a este pedido');
+}
+
+/** Saves what arrived of each line and, when asked, marks the order as received — atomically. */
+export async function saveReception(db: D1Database, orderId: number, input: ReceptionInput): Promise<void> {
+  await requireOrderLines(db, orderId, input.lines.map((l) => l.lineId));
+  const statements = input.lines.map((l) =>
+    db.prepare('UPDATE order_lines SET received_quantity = ? WHERE id = ? AND order_id = ?').bind(l.receivedQuantity, l.lineId, orderId),
+  );
+  if (input.markReceived) {
+    statements.push(db.prepare("UPDATE orders SET status = 'recibido', updated_at = datetime('now') WHERE id = ?").bind(orderId));
+  }
+  await db.batch(statements);
 }
 
 /** Sets the unit price of several lines of one order atomically; every line must belong to the order. */

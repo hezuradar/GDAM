@@ -4,6 +4,7 @@ import { displayAmount, formatMoney, formatRate, type FxRates } from '@/domain/m
 import { useDisplayCurrency } from '@/hooks/useDisplayCurrency';
 import type { PaymentSummary } from '@/domain/payments';
 import { lineTotalCents, type OrderTotals } from '@/domain/totals';
+import { missingPieces } from '@/domain/reception';
 import type { Currency, OrderLine, Payment } from '@/domain/types';
 import { PAYMENT_METHOD_LABEL } from '@/i18n/es';
 import { spacing, typography, useThemedStyles, type Theme } from '@/theme/theme';
@@ -69,6 +70,13 @@ type LinesListProps = {
   onPressLine: (id: number) => void;
 };
 
+/** "✓ Recibida" or "Faltan 2 de 20" once the reception has been checked; null before. */
+function receptionText(line: OrderLine): string | null {
+  const missing = missingPieces(line);
+  if (missing === null) return null;
+  return missing === 0 ? '✓ Recibida' : `Faltan ${formatQuantity(missing)} de ${formatQuantity(line.quantity)}`;
+}
+
 export function LinesList({ lines, currency, rates, onPressLine }: LinesListProps) {
   const styles = useThemedStyles(makeStyles);
   const display = useDisplayCurrency();
@@ -89,11 +97,14 @@ export function LinesList({ lines, currency, rates, onPressLine }: LinesListProp
           <View key={line.id} style={index > 0 ? styles.separated : undefined}>
             <PressableRow
               onPress={() => onPressLine(line.id)}
-              accessibilityLabel={`${description}. ${priceText}`}
+              accessibilityLabel={`${description}. ${priceText}${receptionText(line) ? `. ${receptionText(line)}` : ''}`}
               accessibilityHint="Editar línea o añadir precio"
             >
               <Text style={styles.lineTitle}>{description}</Text>
               <Text style={line.unitPriceCents === null ? styles.pendingPrice : styles.secondary}>{priceText}</Text>
+              {receptionText(line) ? (
+                <Text style={missingPieces(line) ? styles.pendingPrice : styles.secondary}>{receptionText(line)}</Text>
+              ) : null}
             </PressableRow>
           </View>
         );

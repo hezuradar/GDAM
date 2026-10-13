@@ -10,7 +10,8 @@ import { Button, ButtonRow, IconButton } from '@/components/ui/Button';
 import { ChipGroup } from '@/components/ui/ChipGroup';
 import { Card, EmptyState, ErrorView, FormScroll, InfoRow, LoadingView, PressableRow, SectionHeader } from '@/components/ui/Layout';
 import { deleteOrder, updateOrderStatus } from '@/api/data';
-import { formatDate, orderSummaryText, plural } from '@/domain/exportText';
+import { formatDate, formatQuantity, orderSummaryText, plural } from '@/domain/exportText';
+import { receptionSummary } from '@/domain/reception';
 import { ORDER_STATUSES, type OrderStatus } from '@/domain/types';
 import { useOrderDetail, type OrderDetail } from '@/hooks/useOrderDetail';
 import { ORDER_STATUS_ICON, ORDER_STATUS_LABEL } from '@/i18n/es';
@@ -43,11 +44,18 @@ export default function OrderDetailScreen() {
   if (!data) return <EmptyState icon="help-circle-outline" title="Pedido no encontrado" message="Puede que se haya eliminado." />;
 
   const { order, supplier, lines, payments, totals, payment } = data;
-  const go = (pathname: '/pedido/linea' | '/pedido/pago' | '/pedido/importar' | '/pedido/repartir' | '/pedido/editar', extra: Record<string, number> = {}) =>
+  const go = (
+    pathname: '/pedido/linea' | '/pedido/pago' | '/pedido/importar' | '/pedido/repartir' | '/pedido/recepcion' | '/pedido/editar',
+    extra: Record<string, number> = {},
+  ) =>
     router.push({ pathname, params: { orderId: order.id, ...extra } });
 
+  const reception = receptionSummary(lines);
   const changeStatus = (status: OrderStatus) =>
-    updateOrderStatus(order.id, status)
+    // Receiving goes through the checklist so missing pieces are recorded.
+    status === 'recibido' && lines.length > 0
+      ? go('/pedido/recepcion')
+      : updateOrderStatus(order.id, status)
       .then(() => announce(`Estado: ${ORDER_STATUS_LABEL[status]}`))
       .then(reload)
       .catch((e: unknown) => showError('No se pudo cambiar el estado', e));
@@ -150,6 +158,21 @@ export default function OrderDetailScreen() {
           onPress={() => go('/pedido/repartir')}
         />
       ) : null}
+      {lines.length > 0 && order.status !== 'borrador' && order.status !== 'cancelado' ? (
+        <Button
+          variant={order.status === 'enviado' ? 'primary' : 'secondary'}
+          icon="cube-outline"
+          label={reception.isChecked ? 'Revisar recepción' : 'Recepcionar pedido'}
+          accessibilityHint="Marca lo que ha llegado y lo que falta"
+          onPress={() => go('/pedido/recepcion')}
+        />
+      ) : null}
+      {reception.isChecked && !reception.isComplete ? (
+        <Text style={styles.warning}>
+          ⚠︎ Recepción incompleta: faltan {formatQuantity(reception.missingPieces)} {reception.missingPieces === 1 ? 'pieza' : 'piezas'} en{' '}
+          {plural(reception.missingLines, 'línea', 'líneas')}
+        </Text>
+      ) : null}
 
       <SectionHeader title="Importes" icon="calculator-outline" />
       <DisplayCurrencySwitch value={displayCurrency} onChange={setDisplayCurrency} />
@@ -177,4 +200,5 @@ const makeStyles = (theme: Theme) =>
     title: { ...typography.title, color: theme.colors.text, flexShrink: 1 },
     supplierRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
     body: { ...typography.body, color: theme.colors.text },
+    warning: { ...typography.callout, color: theme.colors.warning.fg, fontWeight: '600' },
   });

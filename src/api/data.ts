@@ -85,6 +85,12 @@ export async function saveLine(orderId: number, input: LineInput, id: number | n
   return id;
 }
 export const deleteLine = (id: number) => apiRequest('DELETE', `/lines/${id}`);
+/** Saves what arrived of each line; with `markReceived` the order also becomes "recibido". */
+export const saveReception = (
+  orderId: number,
+  lines: readonly { lineId: number; receivedQuantity: number | null }[],
+  markReceived: boolean,
+) => apiRequest('PUT', `/orders/${orderId}/reception`, { lines, markReceived });
 /** Sets several unit prices of one order at once (order total split among its lines). */
 export const setLinePrices = (orderId: number, prices: readonly { lineId: number; unitPriceCents: number }[]) =>
   apiRequest<{ count: number }>('PUT', `/orders/${orderId}/line-prices`, { prices });

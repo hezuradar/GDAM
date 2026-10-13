@@ -25,6 +25,7 @@ export default function RootLayout() {
         <Stack.Screen name="pedido/importar" options={{ presentation: 'modal', title: 'Pegar de WhatsApp' }} />
         <Stack.Screen name="pedido/linea" options={{ presentation: 'modal', title: 'Línea' }} />
         <Stack.Screen name="pedido/repartir" options={{ presentation: 'modal', title: 'Repartir importe total' }} />
+        <Stack.Screen name="pedido/recepcion" options={{ presentation: 'modal', title: 'Recepción del pedido' }} />
         <Stack.Screen name="pedido/pago" options={{ presentation: 'modal', title: 'Pago' }} />
         <Stack.Screen name="proveedor/editar" options={{ presentation: 'modal', title: 'Proveedor' }} />
         <Stack.Screen name="producto/[id]" options={{ presentation: 'modal', title: 'Precio de venta' }} />

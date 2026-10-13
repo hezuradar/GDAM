@@ -43,6 +43,8 @@ export interface OrderLine {
   readonly measurements: string;
   readonly unitPriceCents: number | null;
   readonly rawText: string;
+  /** Pieces that actually arrived (reception check); null = not checked yet. */
+  readonly receivedQuantity: number | null;
 }
 
 export interface Payment {

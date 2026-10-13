@@ -150,6 +150,31 @@ export function parseLinePricesInput(raw: unknown): LinePricesInput {
   return { prices };
 }
 
+export interface ReceptionInput {
+  readonly lines: readonly { readonly lineId: number; readonly receivedQuantity: number | null }[];
+  /** Also set the order status to "recibido". */
+  readonly markReceived: boolean;
+}
+
+/** Pieces received per line (null = not checked), and whether to mark the order as received. */
+export function parseReceptionInput(raw: unknown): ReceptionInput {
+  const body = asObject(raw);
+  if (!Array.isArray(body.lines) || body.lines.length === 0 || body.lines.length > MAX_IMPORT_LINES) {
+    throw badRequest(`«lines» debe tener entre 1 y ${MAX_IMPORT_LINES} líneas`);
+  }
+  if (typeof body.markReceived !== 'boolean') throw badRequest('«markReceived» debe ser verdadero o falso');
+  const lines = body.lines.map((item: unknown) => {
+    const line = asObject(item);
+    const received = line.receivedQuantity;
+    if (received !== null && (typeof received !== 'number' || !Number.isFinite(received) || received < 0 || received > MAX_QUANTITY)) {
+      throw badRequest(`«receivedQuantity» debe ser un número entre 0 y ${MAX_QUANTITY}`);
+    }
+    return { lineId: integer(line, 'lineId', 1, 999_999_999), receivedQuantity: received as number | null };
+  });
+  if (new Set(lines.map((l) => l.lineId)).size !== lines.length) throw badRequest('Hay líneas repetidas');
+  return { lines, markReceived: body.markReceived };
+}
+
 export interface LinePricingInput {
   readonly salePriceCents: number | null;
   readonly saleCurrency: Currency | null;

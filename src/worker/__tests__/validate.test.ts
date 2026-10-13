@@ -5,6 +5,7 @@ import {
   parseLineInput,
   parseLinePricesInput,
   parseLinePricingInput,
+  parseReceptionInput,
   parseOrderInput,
   parsePaymentInput,
   parseSettingsInput,
@@ -151,4 +152,31 @@ describe('parseLinePricingInput handling cost', () => {
     expectBadRequest(() => parseLinePricingInput({ ...base, handlingCostCents: -5, handlingCurrency: 'EUR' }), 'handlingCostCents'));
   it('still requires a currency with a sale price', () =>
     expectBadRequest(() => parseLinePricingInput({ ...base, saleCurrency: null }), 'saleCurrency'));
+});
+
+describe('parseReceptionInput', () => {
+  it('accepts received quantities (partial, complete or unchecked) and the received flag', () => {
+    const input = {
+      lines: [
+        { lineId: 1, receivedQuantity: 18 },
+        { lineId: 2, receivedQuantity: 2.5 },
+        { lineId: 3, receivedQuantity: null },
+      ],
+      markReceived: true,
+    };
+    expect(parseReceptionInput(input)).toEqual(input);
+  });
+  it('requires the received flag', () =>
+    expectBadRequest(() => parseReceptionInput({ lines: [{ lineId: 1, receivedQuantity: 1 }] }), 'markReceived'));
+  it('rejects negative or non-numeric quantities', () => {
+    expectBadRequest(() => parseReceptionInput({ lines: [{ lineId: 1, receivedQuantity: -1 }], markReceived: false }), 'receivedQuantity');
+    expectBadRequest(() => parseReceptionInput({ lines: [{ lineId: 1, receivedQuantity: '3' }], markReceived: false }), 'receivedQuantity');
+  });
+  it('rejects repeated lines and empty lists', () => {
+    expectBadRequest(
+      () => parseReceptionInput({ lines: [{ lineId: 1, receivedQuantity: 1 }, { lineId: 1, receivedQuantity: 2 }], markReceived: false }),
+      'repetidas',
+    );
+    expectBadRequest(() => parseReceptionInput({ lines: [], markReceived: true }), 'lines');
+  });
 });
