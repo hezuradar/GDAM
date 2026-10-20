@@ -148,7 +148,12 @@ export default function ProductPricingScreen() {
       : { handlingCostCents: product.handlingCostCents, handlingCurrency: product.handlingCurrency }),
   });
 
+  // Guards against a double tap firing two saves (and two goBack) before state updates.
+  const savingRef = useRef(false);
+
   const save = async (pricing: Parameters<typeof saveLinePricing>[1], message: string) => {
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       await saveLinePricing(product.lineId, pricing);
@@ -157,6 +162,7 @@ export default function ProductPricingScreen() {
     } catch (e: unknown) {
       showError('No se pudo guardar', e);
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };

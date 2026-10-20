@@ -1,5 +1,5 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { announce, announceErrors, showError } from '@/components/ui/alerts';
 import { Button } from '@/components/ui/Button';
@@ -10,7 +10,7 @@ import { TextField } from '@/components/ui/TextField';
 import { getOrder, saveOrder } from '@/api/data';
 import { getSettings } from '@/api/data';
 import { listSuppliers } from '@/api/data';
-import { todayIso } from '@/domain/dates';
+import { todayIso, isValidIsoDate } from '@/domain/dates';
 import { centsToInput, convertInput, currencySymbol, formatRate, marketRates, parseAmount, parseRate, withUsdRate, type FxRates } from '@/domain/money';
 import { CURRENCIES, ORDER_STATUSES, type Currency, type OrderStatus, type Supplier } from '@/domain/types';
 import { ORDER_STATUS_ICON, ORDER_STATUS_LABEL } from '@/i18n/es';
@@ -35,13 +35,14 @@ interface FormState {
   notes: string;
 }
 
-type Errors = Partial<Record<'supplier' | 'shipping' | 'customs' | 'rate', string>>;
+type Errors = Partial<Record<'supplier' | 'date' | 'shipping' | 'customs' | 'rate', string>>;
 
 const currencyOptions = CURRENCIES.map((c) => ({ value: c, label: c }));
 
 function validate(form: FormState): Errors {
   const errors: Errors = {};
   if (form.supplierId === null) errors.supplier = 'Elige un proveedor';
+  if (!isValidIsoDate(form.orderDate)) errors.date = 'Fecha no válida';
   if (form.shipping.trim() && parseAmount(form.shipping) === null) errors.shipping = 'Importe no válido';
   if (form.customs.trim() && parseAmount(form.customs) === null) errors.customs = 'Importe no válido';
   if (form.rate.trim() && parseRate(form.rate) === null) errors.rate = 'Cambio no válido (ej. 1,08)';
@@ -81,6 +82,9 @@ export default function OrderFormScreen() {
       return { ...f, [amountKey]: amount, [currencyKey]: next };
     });
 
+  // StrictMode mounts the effect twice; seeding must happen once or user edits are wiped.
+  const seededFor = useRef<number | null | undefined>(undefined);
+
   useEffect(() => {
     const load = async () => {
       const [list, settings, order] = await Promise.all([listSuppliers(), getSettings(), id ? getOrder(id) : null]);
@@ -92,6 +96,8 @@ export default function OrderFormScreen() {
         goBack();
         return;
       }
+      if (seededFor.current !== undefined && seededFor.current === id) return;
+      seededFor.current = id;
       if (order) {
         setLoadedCurrency(order.currency);
         setForm({
@@ -156,7 +162,7 @@ export default function OrderFormScreen() {
         title="Primero, un proveedor"
         message="Para crear un pedido necesitas al menos un proveedor."
         actionLabel="Añadir proveedor"
-        onAction={() => router.replace('/proveedor/editar')}
+        onAction={() => router.replace({ pathname: '/proveedor/editar', params: { returnTo: '/pedido/editar' } })}
       />
     );
   }
@@ -171,7 +177,7 @@ export default function OrderFormScreen() {
           options={(suppliers ?? []).map((s) => ({ value: s.id, label: s.name }))}
           onChange={(v) => set('supplierId', v)}
         />
-        <DateField label="Fecha del pedido" value={form.orderDate} onChange={(v) => set('orderDate', v)} />
+        <DateField label="Fecha del pedido" value={form.orderDate} onChange={(v) => set('orderDate', v)} error={errors.date} />
         <ChipGroup<Currency> label="Moneda de los productos" value={form.currency} options={currencyOptions} onChange={(v) => set('currency', v)} />
         {loadedCurrency !== null && loadedCurrency !== form.currency ? (
           <Text style={styles.warning}>

@@ -26,7 +26,9 @@ export function Avatar({ name, size = 40 }: { name: string; size?: number }) {
       .split(/\s+/)
       .filter(Boolean)
       .slice(0, 2)
-      .map((word) => word[0]?.toUpperCase())
+      // Spread first: an astral character (emoji, some scripts) is not one UTF-16 unit,
+      // and a lone surrogate would render as a broken glyph.
+      .map((word) => [...word][0]?.toUpperCase())
       .join('') || '?';
   return (
     <View

@@ -41,7 +41,8 @@ export function orderPaidCents(
 
 export function paymentSummary(totalCents: number, paid: number): PaymentSummary {
   const diff = totalCents - paid;
-  const isPaid = totalCents > 0 && diff <= PAID_TOLERANCE_CENTS;
+  // A zero-total order with payments is overpaid, not "parcial" with 0 pending.
+  const isPaid = diff <= PAID_TOLERANCE_CENTS;
   const status: PaymentStatus = paid <= 0 ? 'sin_pagar' : isPaid ? 'pagado' : 'parcial';
   return {
     status,

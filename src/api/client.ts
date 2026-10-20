@@ -13,6 +13,7 @@ const OFFLINE = 'Sin conexión con el servidor. Comprueba tu conexión a Interne
 
 type Listener = () => void;
 const unauthorizedListeners = new Set<Listener>();
+let sessionExpired = false;
 
 /** The sign-in gate subscribes here to show the login screen when the session expires. */
 export function onUnauthorized(listener: Listener): () => void {
@@ -20,6 +21,14 @@ export function onUnauthorized(listener: Listener): () => void {
   return () => {
     unauthorizedListeners.delete(listener);
   };
+}
+
+/**
+ * true once a 401 has closed the session: from then on every request fails with 401 too, so
+ * the resulting errors are silenced (the login gate is already on screen) until login succeeds.
+ */
+export function isSessionExpired(): boolean {
+  return sessionExpired;
 }
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -42,9 +51,14 @@ export async function apiRequest<T>(method: Method, path: string, body?: unknown
   const payload = (await response.json()) as { data?: T; error?: string };
   if (!response.ok) {
     // Login failures are handled by the login form itself; any other 401 means the session expired.
-    if (response.status === 401 && path !== '/login') unauthorizedListeners.forEach((listener) => listener());
+    // Parallel requests after the expiry must not fire the gate (and its alert) again and again.
+    if (response.status === 401 && path !== '/login' && !sessionExpired) {
+      sessionExpired = true;
+      unauthorizedListeners.forEach((listener) => listener());
+    }
     throw new ApiError(response.status, payload.error ?? `Error del servidor (${response.status})`);
   }
+  if (path === '/login') sessionExpired = false;
   return payload.data as T;
 }
 

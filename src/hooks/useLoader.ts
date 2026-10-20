@@ -40,7 +40,10 @@ export function useLoader<T>(load: () => Promise<T>): LoaderState<T> {
     useCallback(() => {
       void reload();
       return () => {
+        // Invalidate the in-flight request and clear the spinner: otherwise blurring with a
+        // pending load left `loading` true forever ("cargando" on the next screen).
         requestId.current += 1;
+        setLoading(false);
       };
     }, [reload]),
   );

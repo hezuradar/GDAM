@@ -24,6 +24,14 @@ export async function shareText(text: string, title: string): Promise<void> {
  * pick Files, Drive, mail…; elsewhere the file is downloaded.
  */
 export async function saveTextFile(text: string, fileName: string, title: string): Promise<void> {
+  const canDownload =
+    typeof File !== 'undefined' &&
+    typeof URL !== 'undefined' &&
+    typeof URL.createObjectURL === 'function' &&
+    typeof document !== 'undefined';
+  if (!canDownload) {
+    throw new Error('Este navegador no permite descargar archivos. Usa Chrome o Firefox, o ábrelo en el ordenador.');
+  }
   const file = new File([text], fileName, { type: 'application/json' });
   if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
     try {

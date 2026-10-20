@@ -31,7 +31,7 @@ const describeLine = (line: OrderLine) =>
   [`${formatQuantity(line.quantity)} ×`, line.pieceType, line.measurements].filter(Boolean).join(' ');
 
 export default function DistributeTotalScreen() {
-  const orderId = parseIdParam(useLocalSearchParams<{ orderId: string }>().orderId) ?? 0;
+  const orderId = parseIdParam(useLocalSearchParams<{ orderId: string }>().orderId);
   const theme = useTheme();
   const styles = useThemedStyles(makeStyles);
   const { data, loading } = useOrderDetail(orderId);

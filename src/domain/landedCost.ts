@@ -87,6 +87,8 @@ export function computeProductCosts(rows: readonly ProductSource[], marketRates:
       convert(r.shippingCents, r.shippingCurrency, r.currency, rates) +
       convert(r.customsCents, r.customsCurrency, r.currency, rates);
     const orderValue = valueByOrder.get(r.orderId) ?? 0;
+    // Rounding each unit to the nearest cent keeps the total drift below half a cent per piece;
+    // an exact split would need fractional cents, which cannot be stored.
     const allocatedPerUnitCents = orderValue > 0 ? Math.round((extra * r.quantity * baseUnitCents) / orderValue / r.quantity) : 0;
     return {
       ...r,

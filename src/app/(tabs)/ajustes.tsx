@@ -26,7 +26,10 @@ const SOURCE_LABEL: Record<string, string> = {
 function formatWhen(value: string | null): string {
   if (!value) return '—';
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return formatDate(value);
-  const date = new Date(value);
+  // D1 writes "YYYY-MM-DD HH:MM:SS" in UTC without a zone marker; without the Z the
+  // browser would interpret it as local time and show a shifted hour.
+  const normalised = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value) ? `${value.replace(' ', 'T')}Z` : value;
+  const date = new Date(normalised);
   return Number.isNaN(date.getTime())
     ? value
     : date.toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });

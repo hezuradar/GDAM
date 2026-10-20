@@ -31,6 +31,11 @@ function toMicrosWithin(value: unknown, min: number, max: number): number | null
 const toRateMicros = (value: unknown) => toMicrosWithin(value, MIN_PLAUSIBLE, MAX_PLAUSIBLE);
 const toInrMicros = (value: unknown) => toMicrosWithin(value, MIN_PLAUSIBLE_INR, MAX_PLAUSIBLE_INR);
 
+/** A usable unix timestamp (seconds) that `Date` can represent once multiplied by 1000. */
+function isPlausibleUnix(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 && value < 8_640_000_000_000;
+}
+
 /** https://open.er-api.com/v6/latest/EUR */
 export function parseOpenErApi(payload: unknown): FxQuote | null {
   if (!isRecord(payload) || payload.result !== 'success' || payload.base_code !== 'EUR') return null;
@@ -39,7 +44,8 @@ export function parseOpenErApi(payload: unknown): FxQuote | null {
   const rateMicros = toRateMicros(rates.USD);
   if (rateMicros === null) return null;
   const unix = payload.time_last_update_unix;
-  const asOf = typeof unix === 'number' ? new Date(unix * 1000).toISOString() : new Date().toISOString();
+  // A corrupt timestamp must not throw (RangeError): fall back to "now".
+  const asOf = isPlausibleUnix(unix) ? new Date(unix * 1000).toISOString() : new Date().toISOString();
   return { rateMicros, inrMicros: toInrMicros(rates.INR), asOf, source: 'open.er-api.com' };
 }
 

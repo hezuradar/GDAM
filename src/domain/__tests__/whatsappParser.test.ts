@@ -92,6 +92,13 @@ describe('parseWhatsAppText', () => {
     });
   });
 
+  it('keeps an unparseable price in the description instead of dropping it', () => {
+    // "1,2.3" mixes separators and cannot be parsed: the text must survive for manual review.
+    const [line] = parseWhatsAppText('10 tornillo M8x40 a 1,2.3 €');
+    expect(line).toMatchObject({ quantity: 10, unitPriceCents: null, priceCurrency: null });
+    expect(`${line?.pieceType} ${line?.measurements}`).toContain('1,2.3');
+  });
+
   it('accepts "x" after the quantity and a decimal trailing price', () => {
     const [line] = parseWhatsAppText('5 x placa 200x300x5 3.50');
     expect(line).toMatchObject({

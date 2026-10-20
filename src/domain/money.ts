@@ -45,7 +45,12 @@ export function parseDecimal(input: string): number | null {
   if (lastDot >= 0 && lastComma >= 0) {
     const decimalSep = lastDot > lastComma ? '.' : ',';
     const thousandsSep = decimalSep === '.' ? ',' : '.';
-    normalised = text.split(thousandsSep).join('').replace(decimalSep, '.');
+    const sepIndex = text.lastIndexOf(decimalSep);
+    const intPart = text.slice(0, sepIndex);
+    const decPart = text.slice(sepIndex + 1);
+    // The integer part must be a well-formed thousands grouping ("1.234,50" ok; "1,2.3" rejected).
+    if (!new RegExp(`^\\d{1,3}(?:\\${thousandsSep}\\d{3})*$`).test(intPart) || !/^\d+$/.test(decPart)) return null;
+    normalised = intPart.split(thousandsSep).join('').concat('.', decPart);
   } else if (lastComma >= 0) {
     if (text.indexOf(',') !== lastComma) return null;
     normalised = text.replace(',', '.');
@@ -63,7 +68,9 @@ export function parseDecimal(input: string): number | null {
 /** Parses a user-entered amount to integer cents (half-up). */
 export function parseAmount(input: string): number | null {
   const value = parseDecimal(input.trim());
-  return value === null ? null : Math.round(value * 100 + Number.EPSILON);
+  if (value === null) return null;
+  // toPrecision strips the binary-float noise so half cents really round half-up ("1,005" → 101).
+  return Math.round(Number((value * 100).toPrecision(14)));
 }
 
 function groupThousands(integerPart: string): string {

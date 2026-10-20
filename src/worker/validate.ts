@@ -27,6 +27,8 @@ export interface SettingsInput {
 export interface ImportInput {
   readonly lines: readonly LineInput[];
   readonly replaceExisting: boolean;
+  /** Shipping applied in the same transaction as the lines (null = leave it untouched). */
+  readonly shipping: { readonly cents: number; readonly currency: Currency } | null;
 }
 
 const MAX_CENTS = 100_000_000_000; // 1.000 millones
@@ -125,11 +127,21 @@ export function parseLineInput(raw: unknown): LineInput {
 
 export function parseImportInput(raw: unknown): ImportInput {
   const body = asObject(raw);
-  if (!Array.isArray(body.lines) || body.lines.length === 0 || body.lines.length > MAX_IMPORT_LINES) {
-    throw badRequest(`«lines» debe tener entre 1 y ${MAX_IMPORT_LINES} líneas`);
+  if (!Array.isArray(body.lines) || body.lines.length > MAX_IMPORT_LINES) {
+    throw badRequest(`«lines» debe tener como máximo ${MAX_IMPORT_LINES} líneas`);
   }
   if (typeof body.replaceExisting !== 'boolean') throw badRequest('«replaceExisting» debe ser verdadero o falso');
-  return { lines: body.lines.map(parseLineInput), replaceExisting: body.replaceExisting };
+  const shippingCents = nullableInteger(body, 'shippingCents', 0, MAX_CENTS);
+  const shippingCurrency =
+    body.shippingCurrency === null || body.shippingCurrency === undefined
+      ? null
+      : oneOf<Currency>(body, 'shippingCurrency', CURRENCIES);
+  if (shippingCents !== null && shippingCurrency === null) throw badRequest('«shippingCurrency» es obligatorio con un coste de envío');
+  const shipping = shippingCents === null || shippingCurrency === null ? null : { cents: shippingCents, currency: shippingCurrency };
+  if (body.lines.length === 0 && shipping === null) {
+    throw badRequest(`«lines» debe tener entre 1 y ${MAX_IMPORT_LINES} líneas`);
+  }
+  return { lines: body.lines.map(parseLineInput), replaceExisting: body.replaceExisting, shipping };
 }
 
 export interface LinePricesInput {

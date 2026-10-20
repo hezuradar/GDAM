@@ -31,8 +31,16 @@ export function setDisplayCurrency(value: DisplayCurrency): void {
 
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
+  // Changes made in another tab also update this one.
+  const onStorage = (event: StorageEvent) => {
+    if (event.key !== null && event.key !== STORAGE_KEY) return;
+    current = read();
+    listener();
+  };
+  window.addEventListener('storage', onStorage);
   return () => {
     listeners.delete(listener);
+    window.removeEventListener('storage', onStorage);
   };
 }
 

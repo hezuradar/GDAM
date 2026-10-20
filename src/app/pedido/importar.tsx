@@ -7,7 +7,7 @@ import { announce, confirmDestructive, showError } from '@/components/ui/alerts'
 import { Button } from '@/components/ui/Button';
 import { Card, EmptyState, FormScroll, LoadingView, SectionHeader } from '@/components/ui/Layout';
 import { TextField } from '@/components/ui/TextField';
-import { importLines, saveOrder } from '@/api/data';
+import { importLines } from '@/api/data';
 import { formatQuantity } from '@/domain/exportText';
 import { formatMoney } from '@/domain/money';
 import { plural } from '@/domain/exportText';
@@ -30,7 +30,7 @@ function describeLine(line: ParsedLine, orderCurrency: Currency): string {
 }
 
 export default function ImportScreen() {
-  const orderId = parseIdParam(useLocalSearchParams<{ orderId: string }>().orderId) ?? 0;
+  const orderId = parseIdParam(useLocalSearchParams<{ orderId: string }>().orderId);
   const theme = useTheme();
   const styles = useThemedStyles(makeStyles);
   const { data, loading } = useOrderDetail(orderId);
@@ -83,14 +83,13 @@ export default function ImportScreen() {
     setSaving(true);
     try {
       const inputs = included.map((line) => toImportableLine(line, order.currency, totals.rates));
-      if (inputs.length > 0) await importLines(order.id, inputs, replaceExisting);
-      if (message.shipping && applyShipping) {
-        const { id: _id, ...orderInput } = order;
-        await saveOrder(
-          { ...orderInput, shippingCents: message.shipping.cents, shippingCurrency: message.shipping.currency ?? order.currency },
-          order.id,
-        );
-      }
+      // Shipping travels with the lines in the same server transaction: no stale full-order
+      // overwrite, and no window where the import succeeded but the shipping update did not.
+      const shipping =
+        message.shipping && applyShipping
+          ? { cents: message.shipping.cents, currency: message.shipping.currency ?? order.currency }
+          : null;
+      if (inputs.length > 0 || shipping) await importLines(order.id, inputs, replaceExisting, shipping);
       announce(`${inputs.length} líneas añadidas`);
       goBack();
     } catch (e: unknown) {

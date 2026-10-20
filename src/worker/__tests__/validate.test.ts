@@ -77,6 +77,30 @@ describe('parseLineInput / parseImportInput', () => {
   });
   it('rejects empty imports', () => expectBadRequest(() => parseImportInput({ lines: [], replaceExisting: false }), 'lines'));
   it('requires replaceExisting', () => expectBadRequest(() => parseImportInput({ lines: [line] }), 'replaceExisting'));
+
+  it('accepts a shipping-only import (updating the shipping of an existing order)', () => {
+    expect(parseImportInput({ lines: [], replaceExisting: false, shippingCents: 2500, shippingCurrency: 'EUR' })).toEqual({
+      lines: [],
+      replaceExisting: false,
+      shipping: { cents: 2500, currency: 'EUR' },
+    });
+  });
+  it('applies the shipping to a normal import', () => {
+    expect(parseImportInput({ lines: [line], replaceExisting: true, shippingCents: 100, shippingCurrency: 'INR' }).shipping).toEqual({
+      cents: 100,
+      currency: 'INR',
+    });
+  });
+  it('leaves the shipping untouched when it is absent', () => {
+    expect(parseImportInput({ lines: [line], replaceExisting: false }).shipping).toBeNull();
+  });
+  it('rejects a shipping amount without currency', () =>
+    expectBadRequest(() => parseImportInput({ lines: [line], replaceExisting: false, shippingCents: 100 }), 'shippingCurrency'));
+  it('rejects an unknown shipping currency', () =>
+    expectBadRequest(
+      () => parseImportInput({ lines: [line], replaceExisting: false, shippingCents: 100, shippingCurrency: 'GBP' }),
+      'shippingCurrency',
+    ));
 });
 
 describe('parsePaymentInput', () => {

@@ -87,6 +87,7 @@ describe('payments', () => {
     [1000, 999, 'pagado', 0],
     [1000, 1200, 'pagado', 0],
     [0, 0, 'sin_pagar', 0],
+    [0, 500, 'pagado', 0],
   ] as const)('total %p paid %p is %p with %p pending', (total, paid, status, pending) => {
     expect(paymentSummary(total, paid)).toMatchObject({ status, pendingCents: pending });
   });

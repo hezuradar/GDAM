@@ -238,14 +238,22 @@ export async function deleteLine(db: D1Database, id: number): Promise<void> {
   await requireChanged(await db.prepare('DELETE FROM order_lines WHERE id = ?').bind(id).run(), 'Línea');
 }
 
-/** Adds (or replaces) lines atomically: either every line is stored or none. */
+/** Adds (or replaces) lines atomically, optionally applying the order's shipping in the same batch. */
 export async function importLines(db: D1Database, orderId: number, input: ImportInput): Promise<number> {
   await requireOrder(db, orderId);
   const start = input.replaceExisting ? 1 : await nextPosition(db, orderId);
   const statements = [
     ...(input.replaceExisting ? [db.prepare('DELETE FROM order_lines WHERE order_id = ?').bind(orderId)] : []),
     ...input.lines.map((line, index) => insertLineStatement(db, orderId, start + index, line)),
+    ...(input.shipping
+      ? [
+          db
+            .prepare("UPDATE orders SET shipping_cents = ?, shipping_currency = ?, updated_at = datetime('now') WHERE id = ?")
+            .bind(input.shipping.cents, input.shipping.currency, orderId),
+        ]
+      : []),
   ];
+  if (statements.length === 0) throw new HttpError(400, 'Nada que guardar');
   await db.batch(statements);
   return input.lines.length;
 }

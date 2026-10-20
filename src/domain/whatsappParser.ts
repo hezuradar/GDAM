@@ -77,7 +77,10 @@ function extractPrice(text: string): PriceSplit {
   if (!isExplicitPrice || rest.length === 0) {
     return { rest: text, unitPriceCents: null, priceCurrency: null };
   }
-  return { rest, unitPriceCents: parseAmount(amount), priceCurrency: currency };
+  const cents = parseAmount(amount);
+  // An amount that cannot be parsed ("1,2.3") is kept in the description, never silently dropped.
+  if (cents === null) return { rest: text, unitPriceCents: null, priceCurrency: null };
+  return { rest, unitPriceCents: cents, priceCurrency: currency };
 }
 
 function splitPieceAndMeasurements(text: string): { pieceType: string; measurements: string } {

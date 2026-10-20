@@ -1,3 +1,5 @@
+import { ApiError, isSessionExpired } from '@/api/client';
+
 const LIVE_REGION_ID = 'a11y-announcer';
 
 /** Visually hidden aria-live region shared by the whole app (screen readers read its changes). */
@@ -46,6 +48,8 @@ export function showMessage(title: string, message: string): void {
 }
 
 export function showError(title: string, error: unknown): void {
+  // A 401 that closed the session is already handled by the login gate: no dialog on top of it.
+  if (isSessionExpired() && error instanceof ApiError && error.status === 401) return;
   showMessage(title, errorMessage(error));
 }
 

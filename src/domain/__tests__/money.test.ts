@@ -12,11 +12,15 @@ describe('parseAmount', () => {
     ['  12 € ', 1200],
     ['$3.5', 350],
     ['0,005', 1],
+    // Half a cent must round up even when the binary float sits just below (0.145 * 100).
+    ['1,005', 101],
+    ['8,245', 825],
+    ['0,145', 15],
   ])('parses %p as %p cents', (input, expected) => {
     expect(parseAmount(input)).toBe(expected);
   });
 
-  it.each(['', 'abc', '-5', '1,2,3,4x'])('returns null for invalid input %p', (input) => {
+  it.each(['', 'abc', '-5', '1,2,3,4x', '1,2.3', '1.23,4'])('returns null for invalid input %p', (input) => {
     expect(parseAmount(input)).toBeNull();
   });
 });

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { announce, announceErrors, confirmDestructive, showError } from '@/components/ui/alerts';
 import { Button } from '@/components/ui/Button';
-import { FormScroll } from '@/components/ui/Layout';
+import { EmptyState, FormScroll } from '@/components/ui/Layout';
 import { TextField } from '@/components/ui/TextField';
 import { deleteLine, getLine, saveLine } from '@/api/data';
 import { getOrder } from '@/api/data';
@@ -18,7 +18,7 @@ type Errors = Partial<Record<'quantity' | 'pieceType' | 'price', string>>;
 export default function LineFormScreen() {
   const styles = useThemedStyles(makeStyles);
   const params = useLocalSearchParams<{ orderId: string; id?: string }>();
-  const orderId = parseIdParam(params.orderId) ?? 0;
+  const orderId = parseIdParam(params.orderId);
   const id = parseIdParam(params.id);
   const [currency, setCurrency] = useState<Currency>('EUR');
   const [quantity, setQuantity] = useState('1');
@@ -30,6 +30,7 @@ export default function LineFormScreen() {
   const [isSaving, setSaving] = useState(false);
 
   useEffect(() => {
+    if (orderId === null) return;
     const load = async () => {
       const [order, line] = await Promise.all([getOrder(orderId), id ? getLine(id) : null]);
       if (!order || (id !== null && !line)) {
@@ -48,6 +49,10 @@ export default function LineFormScreen() {
     };
     load().catch((e: unknown) => showError('No se pudo cargar la línea', e));
   }, [orderId, id]);
+
+  if (orderId === null) {
+    return <EmptyState icon="help-circle-outline" title="Pedido no encontrado" message="Falta el identificador del pedido." />;
+  }
 
   const handleSave = async () => {
     const qty = parseDecimal(quantity.trim());

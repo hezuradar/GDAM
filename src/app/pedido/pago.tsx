@@ -8,7 +8,7 @@ import { DateField } from '@/components/ui/DateField';
 import { Card, EmptyState, ErrorView, FormScroll, InfoRow, LoadingView } from '@/components/ui/Layout';
 import { TextField } from '@/components/ui/TextField';
 import { deletePayment, getPayment, savePayment } from '@/api/data';
-import { todayIso } from '@/domain/dates';
+import { isValidIsoDate, todayIso } from '@/domain/dates';
 import { centsToInput, convert, convertInput, currencySymbol, formatMoney, formatRate, parseAmount, parseRate, withUsdRate } from '@/domain/money';
 import { CURRENCIES, PAYMENT_METHODS, type Currency, type PaymentMethod } from '@/domain/types';
 import { useOrderDetail } from '@/hooks/useOrderDetail';
@@ -16,12 +16,12 @@ import { PAYMENT_METHOD_LABEL } from '@/i18n/es';
 import { goBack, parseIdParam } from '@/lib/params';
 import { typography, useThemedStyles, type Theme } from '@/theme/theme';
 
-type Errors = Partial<Record<'amount' | 'rate', string>>;
+type Errors = Partial<Record<'amount' | 'rate' | 'date', string>>;
 
 export default function PaymentFormScreen() {
   const styles = useThemedStyles(makeStyles);
   const params = useLocalSearchParams<{ orderId: string; id?: string }>();
-  const orderId = parseIdParam(params.orderId) ?? 0;
+  const orderId = parseIdParam(params.orderId);
   const id = parseIdParam(params.id);
   const { data, error, loading, reload } = useOrderDetail(orderId);
   const [isSaving, setSaving] = useState(false);
@@ -34,6 +34,13 @@ export default function PaymentFormScreen() {
   const [errors, setErrors] = useState<Errors>({});
 
   useEffect(() => {
+    // Reset first: the same screen instance can move to another payment or order.
+    setAmount('');
+    setCurrency(null);
+    setRate('');
+    setPaidOn(todayIso());
+    setMethod('transferencia');
+    setNote('');
     if (id === null) return;
     getPayment(id)
       .then((p) => {
@@ -50,7 +57,7 @@ export default function PaymentFormScreen() {
         setNote(p.note);
       })
       .catch((e: unknown) => showError('No se pudo cargar el pago', e));
-  }, [id]);
+  }, [id, orderId]);
 
   if (error) return <ErrorView message={error} onRetry={reload} />;
   if (!data) {
@@ -77,6 +84,7 @@ export default function PaymentFormScreen() {
     const found: Errors = {};
     if (amountCents === null || amountCents <= 0) found.amount = 'Introduce un importe mayor que 0';
     if (isEurUsdPair && rate.trim() && parseRate(rate) === null) found.rate = 'Cambio no válido (ej. 1,08)';
+    if (!isValidIsoDate(paidOn)) found.date = 'Fecha no válida';
     setErrors(found);
     if (!announceErrors(found) || amountCents === null || isSaving) return;
     setSaving(true);
@@ -141,7 +149,7 @@ export default function PaymentFormScreen() {
           ) : null}
         </>
       ) : null}
-      <DateField label="Fecha del pago" value={paidOn} onChange={setPaidOn} />
+      <DateField label="Fecha del pago" value={paidOn} onChange={setPaidOn} error={errors.date} />
       <ChipGroup<PaymentMethod> label="Forma de pago" value={method} options={PAYMENT_METHODS.map((m) => ({ value: m, label: PAYMENT_METHOD_LABEL[m] }))} onChange={setMethod} />
       <TextField label="Nota" value={note} onChangeText={setNote} placeholder="Referencia de la transferencia…" maxLength={500} />
       <Button label={isSaving ? 'Guardando…' : 'Guardar pago'} icon="checkmark" onPress={handleSave} isDisabled={isSaving} />

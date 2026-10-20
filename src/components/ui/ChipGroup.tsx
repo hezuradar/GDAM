@@ -45,7 +45,14 @@ function Chip({ label, icon, isSelected, role, onPress }: ChipProps) {
       {isSelected || icon ? (
         <Ionicons name={stateIcon} size={16} style={isSelected ? styles.textSelected : styles.text} />
       ) : null}
-      <Text style={[styles.text, isSelected && styles.textSelected]}>{label}</Text>
+      <Text
+        style={[styles.text, isSelected && styles.textSelected]}
+        // The Pressable already exposes the label; keeping it out avoids double announcements.
+        accessibilityElementsHidden
+        importantForAccessibility="no"
+      >
+        {label}
+      </Text>
     </Pressable>
   );
 }

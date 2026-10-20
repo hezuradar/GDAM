@@ -182,7 +182,11 @@ export function profitStats(products: readonly ProductCost[], display: Currency,
   const costCents = profits.reduce((sum, p) => sum + Math.round(p.unitCostCents * p.quantity), 0);
   const saleCents = profits.reduce((sum, p) => sum + Math.round(p.unitSaleCents * p.quantity), 0);
   const profitCents = saleCents - costCents;
-  const byMarginDesc = (a: ProductProfit, b: ProductProfit) => (b.marginBp ?? -Infinity) - (a.marginBp ?? -Infinity);
+  // Nulls sort last; subtracting them directly would yield NaN and scramble the order.
+  const byMarginDesc = (a: ProductProfit, b: ProductProfit): number => {
+    if (a.marginBp === null || b.marginBp === null) return a.marginBp === b.marginBp ? 0 : a.marginBp === null ? 1 : -1;
+    return b.marginBp - a.marginBp;
+  };
 
   return {
     productCount: products.length,

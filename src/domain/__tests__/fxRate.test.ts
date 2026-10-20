@@ -43,6 +43,14 @@ describe('parseOpenErApi', () => {
   it('rejects absurd rates (protects totals from bad data)', () => {
     expect(parseOpenErApi({ result: 'success', base_code: 'EUR', rates: { USD: 50 } })).toBeNull();
   });
+
+  it('falls back to "now" for a corrupt timestamp instead of throwing', () => {
+    for (const time_last_update_unix of [1e20, -5, Number.NaN, 'ayer']) {
+      const quote = parseOpenErApi({ result: 'success', base_code: 'EUR', time_last_update_unix, rates: { USD: 1.12 } });
+      expect(quote?.rateMicros).toBe(1_120_000);
+      expect(Number.isNaN(Date.parse(quote?.asOf ?? ''))).toBe(false);
+    }
+  });
 });
 
 describe('parseCurrencyApi', () => {

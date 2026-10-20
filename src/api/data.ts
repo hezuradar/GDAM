@@ -94,9 +94,18 @@ export const saveReception = (
 /** Sets several unit prices of one order at once (order total split among its lines). */
 export const setLinePrices = (orderId: number, prices: readonly { lineId: number; unitPriceCents: number }[]) =>
   apiRequest<{ count: number }>('PUT', `/orders/${orderId}/line-prices`, { prices });
-/** Adds (or replaces) lines atomically on the server. */
-export const importLines = (orderId: number, lines: readonly LineInput[], replaceExisting: boolean) =>
-  apiRequest<{ count: number }>('POST', `/orders/${orderId}/lines/import`, { lines, replaceExisting });
+/** Adds (or replaces) lines atomically on the server; the optional shipping is applied in the same transaction. */
+export const importLines = (
+  orderId: number,
+  lines: readonly LineInput[],
+  replaceExisting: boolean,
+  shipping?: { cents: number; currency: Currency } | null,
+) =>
+  apiRequest<{ count: number }>('POST', `/orders/${orderId}/lines/import`, {
+    lines,
+    replaceExisting,
+    ...(shipping ? { shippingCents: shipping.cents, shippingCurrency: shipping.currency } : {}),
+  });
 
 // Products (landed cost and sale pricing)
 export const listProducts = () => apiRequest<{ products: ProductSource[]; settings: AppSettings }>('GET', '/products');
@@ -129,5 +138,6 @@ export const saveSettings = (input: { defaultCurrency: Currency; fxAuto: boolean
 /** Downloads the current market EUR/USD rate on the server and returns the updated settings. */
 export const refreshFxRate = () => apiRequest<AppSettings>('POST', '/fx/refresh', {});
 export async function exportBackupJson(): Promise<string> {
-  return JSON.stringify(await apiRequest<unknown>('GET', '/backup'), null, 1);
+  // No indentation: the backup is meant to be machine-readable and stays much smaller.
+  return JSON.stringify(await apiRequest<unknown>('GET', '/backup'));
 }

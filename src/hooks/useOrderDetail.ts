@@ -23,7 +23,8 @@ export async function loadOrderDetail(orderId: number): Promise<OrderDetail | nu
   return { ...raw, totals, payment: paymentSummary(totals.totalCents, paid) };
 }
 
-export function useOrderDetail(orderId: number): LoaderState<OrderDetail | null> {
-  const load = useCallback(() => loadOrderDetail(orderId), [orderId]);
+/** null orderId (missing/invalid param) skips the request; the screen shows its empty state. */
+export function useOrderDetail(orderId: number | null): LoaderState<OrderDetail | null> {
+  const load = useCallback(async () => (orderId === null ? null : loadOrderDetail(orderId)), [orderId]);
   return useLoader(load);
 }
