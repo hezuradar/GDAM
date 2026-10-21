@@ -33,7 +33,7 @@
     "dev": "npm run build && wrangler d1 migrations apply compras-db --local && wrangler dev",
     "test": "jest",
     "test:coverage": "jest --coverage",
-    "typecheck": "tsc --noEmit && tsc -p src/worker/tsconfig.json",
+    "typecheck": "tsc --noEmit && tsc -p src/worker/tsconfig.json && tsc -p tsconfig.test.json",
     "db:migrate": "wrangler d1 migrations apply compras-db --remote",
     "deploy": "npm run build && wrangler d1 migrations apply compras-db --remote && wrangler deploy"
   },
@@ -42,7 +42,10 @@
       {
         "displayName": "app",
         "preset": "jest-expo",
-        "testMatch": ["<rootDir>/src/domain/**/__tests__/**/*.test.ts"],
+        "testMatch": [
+          "<rootDir>/src/domain/**/__tests__/**/*.test.ts",
+          "<rootDir>/src/__tests__/**/*.test.ts"
+        ],
         "collectCoverageFrom": ["<rootDir>/src/domain/**/*.ts", "!<rootDir>/src/domain/types.ts"]
       },
       {

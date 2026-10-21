@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { radius, spacing, typography, useTheme } from '@/theme/theme';
 
@@ -6,6 +7,8 @@ type DateFieldProps = { label: string; value: string; onChange: (iso: string) =>
 /** The browser's native date input: opens the phone's own date wheel/calendar, accessible and keyboard friendly. */
 export function DateField({ label, value, onChange, error }: DateFieldProps) {
   const theme = useTheme();
+  // The error text is linked to the input so screen readers announce it with the field.
+  const errorId = useId();
   return (
     <View style={styles.row}>
       <Text style={[styles.label, { color: theme.colors.text }]}>{label}</Text>
@@ -14,6 +17,7 @@ export function DateField({ label, value, onChange, error }: DateFieldProps) {
           type="date"
           aria-label={label}
           aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorId : undefined}
           value={value}
           // Clearing the field must reach the form; an invalid (partial) date is left to
           // the browser's own state and validated on save.
@@ -29,7 +33,11 @@ export function DateField({ label, value, onChange, error }: DateFieldProps) {
             colorScheme: theme.dark ? 'dark' : 'light',
           }}
         />
-        {error ? <Text style={[styles.error, { color: theme.colors.warning.fg }]}>{error}</Text> : null}
+        {error ? (
+          <Text id={errorId} style={[styles.error, { color: theme.colors.warning.fg }]}>
+            {error}
+          </Text>
+        ) : null}
       </View>
     </View>
   );

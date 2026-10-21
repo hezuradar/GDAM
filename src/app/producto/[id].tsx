@@ -64,6 +64,10 @@ export default function ProductPricingScreen() {
   const [isHandlingEdited, setHandlingEdited] = useState(false);
   const [isSaving, setSaving] = useState(false);
   const seeded = useRef(false);
+  // Guards against a double tap firing two saves (and two goBack) before state updates.
+  // Declared before the early returns below: a hook after them would change the hook
+  // count between renders and React would throw.
+  const savingRef = useRef(false);
 
   // Zero-price replacements (or lines without price) are costed with a theoretical value.
   const needsTheoretical = !!product && (product.unitPriceCents === null || product.unitPriceCents === 0);
@@ -149,8 +153,6 @@ export default function ProductPricingScreen() {
   });
 
   // Guards against a double tap firing two saves (and two goBack) before state updates.
-  const savingRef = useRef(false);
-
   const save = async (pricing: Parameters<typeof saveLinePricing>[1], message: string) => {
     if (savingRef.current) return;
     savingRef.current = true;

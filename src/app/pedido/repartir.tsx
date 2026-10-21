@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { setLinePrices } from '@/api/data';
 import { announce, confirmDestructive, showError } from '@/components/ui/alerts';
@@ -27,12 +27,49 @@ const MODE_OPTIONS: readonly { value: DistributionMode; label: string }[] = [
   { value: 'linea', label: 'Igual por línea' },
 ];
 
+/** Stable empty list so the hooks below keep the same identity while the order loads. */
+const EMPTY_LINES: readonly OrderLine[] = [];
+
 const describeLine = (line: OrderLine) =>
   [`${formatQuantity(line.quantity)} ×`, line.pieceType, line.measurements].filter(Boolean).join(' ');
 
+type DistributionRowProps = {
+  line: OrderLine;
+  isIncluded: boolean;
+  isReplacement: boolean;
+  detail: string;
+  onToggle: (lineId: number) => void;
+};
+
+/** Memoized row: the amount field must not re-render every line of the order. */
+const DistributionRow = memo(function DistributionRow({ line, isIncluded, isReplacement, detail, onToggle }: DistributionRowProps) {
+  const theme = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  const description = describeLine(line);
+  return (
+    <Pressable
+      onPress={() => onToggle(line.id)}
+      disabled={isReplacement}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: isIncluded, disabled: isReplacement }}
+      accessibilityLabel={`${description}. ${detail}`}
+      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+    >
+      <Ionicons
+        name={isReplacement ? 'refresh-circle-outline' : isIncluded ? 'checkbox' : 'square-outline'}
+        size={24}
+        color={isIncluded ? theme.colors.primary : theme.colors.textSecondary}
+      />
+      <View style={styles.flex}>
+        <Text style={[styles.lineText, !isIncluded && styles.muted]}>{description}</Text>
+        <Text style={styles.note}>{detail}</Text>
+      </View>
+    </Pressable>
+  );
+});
+
 export default function DistributeTotalScreen() {
   const orderId = parseIdParam(useLocalSearchParams<{ orderId: string }>().orderId);
-  const theme = useTheme();
   const styles = useThemedStyles(makeStyles);
   const { data, loading, error, reload } = useOrderDetail(orderId);
   const [amountText, setAmountText] = useState('');
@@ -42,24 +79,45 @@ export default function DistributeTotalScreen() {
   const [excluded, setExcluded] = useState<ReadonlySet<number>>(new Set());
   const [isSaving, setSaving] = useState(false);
 
+  // Hooks must run on every render, so the derived values are computed before the early
+  // returns below, with safe fallbacks while the order is still loading.
+  const lines = data?.lines ?? EMPTY_LINES;
+  const totals = data?.totals;
+  const extrasCents = totals ? totals.shippingCents + totals.customsCents : 0;
+  const excludedCents = excludedPricedCents(lines, excluded);
+  const amountCents = amountText.trim() === '' ? null : parseAmount(amountText);
+  const takenExtras = includesExtras && extrasCents > 0 ? extrasCents : 0;
+  const takenExcluded = subtractExcluded ? excludedCents : 0;
+  const goodsCents =
+    amountCents === null || !totals ? null : goodsFromTotal(amountCents, totals, takenExtras > 0) - takenExcluded;
+  // The distribution is a pure function of its inputs: memoize it so typing the amount
+  // does not recompute it for every render of the screen.
+  const distribution = useMemo(
+    () => (goodsCents === null ? null : distributeTotal(lines, goodsCents, mode, excluded)),
+    [lines, goodsCents, mode, excluded],
+  );
+  const priceById = useMemo(() => new Map(distribution?.prices.map((p) => [p.lineId, p.unitPriceCents]) ?? []), [distribution]);
+  const toggle = useCallback(
+    (lineId: number) =>
+      setExcluded((prev) => {
+        const next = new Set(prev);
+        if (next.has(lineId)) next.delete(lineId);
+        else next.add(lineId);
+        return next;
+      }),
+    [],
+  );
+
   if (!data) {
     if (error) return <EmptyState icon="alert-circle-outline" title="No se pudo cargar el pedido" message={error} actionLabel="Reintentar" onAction={reload} />;
     return loading ? <LoadingView /> : <EmptyState icon="help-circle-outline" title="Pedido no encontrado" message="Puede que se haya eliminado." />;
   }
-  const { order, totals, lines } = data;
+  const { order } = data;
   if (lines.length === 0) {
     return <EmptyState icon="cube-outline" title="El pedido no tiene líneas" message="Añade las piezas antes de repartir el importe." />;
   }
 
   const money = (cents: number) => formatMoney(cents, order.currency);
-  const extrasCents = totals.shippingCents + totals.customsCents;
-  const excludedCents = excludedPricedCents(lines, excluded);
-  const amountCents = amountText.trim() === '' ? null : parseAmount(amountText);
-  const takenExtras = includesExtras && extrasCents > 0 ? extrasCents : 0;
-  const takenExcluded = subtractExcluded ? excludedCents : 0;
-  const goodsCents = amountCents === null ? null : goodsFromTotal(amountCents, totals, takenExtras > 0) - takenExcluded;
-  const distribution = goodsCents === null ? null : distributeTotal(lines, goodsCents, mode, excluded);
-  const priceById = new Map(distribution?.prices.map((p) => [p.lineId, p.unitPriceCents]) ?? []);
   const selectableCount = lines.filter((l) => !isReplacementLine(l)).length;
   const includedCount = lines.filter((l) => !isReplacementLine(l) && !excluded.has(l.id)).length;
   const overwrittenCount = lines.filter((l) => priceById.has(l.id) && l.unitPriceCents !== null).length;
@@ -70,14 +128,6 @@ export default function DistributeTotalScreen() {
       : goodsCents !== null && goodsCents < 0
         ? 'El importe es menor que lo que se descuenta (envío, aduanas o líneas excluidas)'
         : undefined;
-
-  const toggle = (lineId: number) =>
-    setExcluded((prev) => {
-      const next = new Set(prev);
-      if (next.has(lineId)) next.delete(lineId);
-      else next.add(lineId);
-      return next;
-    });
 
   const runSave = async () => {
     if (!distribution || isSaving) return;
@@ -149,28 +199,15 @@ export default function DistributeTotalScreen() {
         {lines.map((line) => {
           const isReplacement = isReplacementLine(line);
           const isIncluded = !isReplacement && !excluded.has(line.id);
-          const description = describeLine(line);
-          const detail = lineDetail(line);
           return (
-            <Pressable
+            <DistributionRow
               key={line.id}
-              onPress={() => toggle(line.id)}
-              disabled={isReplacement}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: isIncluded, disabled: isReplacement }}
-              accessibilityLabel={`${description}. ${detail}`}
-              style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-            >
-              <Ionicons
-                name={isReplacement ? 'refresh-circle-outline' : isIncluded ? 'checkbox' : 'square-outline'}
-                size={24}
-                color={isIncluded ? theme.colors.primary : theme.colors.textSecondary}
-              />
-              <View style={styles.flex}>
-                <Text style={[styles.lineText, !isIncluded && styles.muted]}>{description}</Text>
-                <Text style={styles.note}>{detail}</Text>
-              </View>
-            </Pressable>
+              line={line}
+              isIncluded={isIncluded}
+              isReplacement={isReplacement}
+              detail={lineDetail(line)}
+              onToggle={toggle}
+            />
           );
         })}
       </Card>

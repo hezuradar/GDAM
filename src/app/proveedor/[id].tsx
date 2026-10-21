@@ -21,6 +21,8 @@ export default function SupplierDetailScreen() {
     return { supplier, orders: filterOrders(list.items, { supplierId: id }) };
   }, [id]);
   const { data, error, loading, reload } = useLoader(load);
+  // Stable handler: an inline arrow would break the memoization of every OrderCard.
+  const openOrder = useCallback((orderId: number) => router.push({ pathname: '/pedido/[id]', params: { id: orderId } }), []);
 
   if (error) return <ErrorView message={error} onRetry={reload} />;
   if (!data && loading) return <LoadingView />;
@@ -82,7 +84,7 @@ export default function SupplierDetailScreen() {
       ) : (
         <View style={styles.orders}>
           {orders.map((item) => (
-            <OrderCard key={item.id} item={item} onPress={(orderId) => router.push({ pathname: '/pedido/[id]', params: { id: orderId } })} />
+            <OrderCard key={item.id} item={item} onPress={openOrder} />
           ))}
         </View>
       )}

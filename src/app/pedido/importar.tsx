@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Clipboard from 'expo-clipboard';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { announce, confirmDestructive, showError } from '@/components/ui/alerts';
 import { Button } from '@/components/ui/Button';
@@ -29,9 +29,46 @@ function describeLine(line: ParsedLine, orderCurrency: Currency): string {
   return [`${formatQuantity(line.quantity)} ×`, line.pieceType || '—', line.measurements, '·', priceText].filter(Boolean).join(' ');
 }
 
+type PreviewRowProps = {
+  line: ParsedLine;
+  index: number;
+  isIncluded: boolean;
+  orderCurrency: Currency;
+  onToggle: (index: number) => void;
+};
+
+/**
+ * Memoized row: a WhatsApp list can have hundreds of lines, and toggling one of them
+ * must not re-render all of them.
+ */
+const PreviewRow = memo(function PreviewRow({ line, index, isIncluded, orderCurrency, onToggle }: PreviewRowProps) {
+  const theme = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  const importable = canImport(line);
+  return (
+    <Pressable
+      onPress={() => importable && onToggle(index)}
+      disabled={!importable}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: isIncluded, disabled: !importable }}
+      accessibilityLabel={`${describeLine(line, orderCurrency)}${line.issues.length ? `. Revisar: ${line.issues.join(', ')}` : ''}`}
+      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+    >
+      <Ionicons
+        name={isIncluded ? 'checkbox' : 'square-outline'}
+        size={24}
+        color={isIncluded ? theme.colors.primary : theme.colors.textSecondary}
+      />
+      <View style={styles.flex}>
+        <Text style={[styles.lineText, !isIncluded && styles.excluded]}>{describeLine(line, orderCurrency)}</Text>
+        {line.issues.length > 0 ? <Text style={styles.issue}>⚠︎ {line.issues.join(' · ')}</Text> : null}
+      </View>
+    </Pressable>
+  );
+});
+
 export default function ImportScreen() {
   const orderId = parseIdParam(useLocalSearchParams<{ orderId: string }>().orderId);
-  const theme = useTheme();
   const styles = useThemedStyles(makeStyles);
   const { data, loading, error, reload } = useOrderDetail(orderId);
   const [text, setText] = useState('');
@@ -49,6 +86,17 @@ export default function ImportScreen() {
     setExcludedFor(message);
     setExcluded(defaultExcluded(message.lines));
   }
+  // Stable callback: toggling one line must not re-render the whole preview.
+  const toggle = useCallback(
+    (index: number) =>
+      setExcluded((prev) => {
+        const next = new Set(prev);
+        if (next.has(index)) next.delete(index);
+        else next.add(index);
+        return next;
+      }),
+    [],
+  );
 
   if (!data) {
     if (error) return <EmptyState icon="alert-circle-outline" title="No se pudo cargar el pedido" message={error} actionLabel="Reintentar" onAction={reload} />;
@@ -57,13 +105,6 @@ export default function ImportScreen() {
   const { order, totals, lines: existing } = data;
 
   const updateText = (value: string) => setText(value);
-  const toggle = (index: number) =>
-    setExcluded((prev) => {
-      const next = new Set(prev);
-      if (next.has(index)) next.delete(index);
-      else next.add(index);
-      return next;
-    });
   const included = parsed.filter((line, i) => !excluded.has(i) && canImport(line));
   const willApplyShipping = Boolean(message.shipping && applyShipping);
   const existingLabel = existing.length === 1 ? 'la línea actual' : `las ${existing.length} líneas actuales`;
@@ -132,26 +173,16 @@ export default function ImportScreen() {
         <>
           <SectionHeader title={`Vista previa (${included.length} de ${parsed.length})`} />
           <Card>
-            {parsed.map((line, index) => {
-              const isIncluded = !excluded.has(index) && canImport(line);
-              return (
-                <Pressable
-                  key={`${index}-${line.rawText}`}
-                  onPress={() => canImport(line) && toggle(index)}
-                  disabled={!canImport(line)}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: isIncluded, disabled: !canImport(line) }}
-                  accessibilityLabel={`${describeLine(line, order.currency)}${line.issues.length ? `. Revisar: ${line.issues.join(', ')}` : ''}`}
-                  style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-                >
-                  <Ionicons name={isIncluded ? 'checkbox' : 'square-outline'} size={24} color={isIncluded ? theme.colors.primary : theme.colors.textSecondary} />
-                  <View style={styles.flex}>
-                    <Text style={[styles.lineText, !isIncluded && styles.excluded]}>{describeLine(line, order.currency)}</Text>
-                    {line.issues.length > 0 ? <Text style={styles.issue}>⚠︎ {line.issues.join(' · ')}</Text> : null}
-                  </View>
-                </Pressable>
-              );
-            })}
+            {parsed.map((line, index) => (
+              <PreviewRow
+                key={`${index}-${line.rawText}`}
+                line={line}
+                index={index}
+                isIncluded={!excluded.has(index) && canImport(line)}
+                orderCurrency={order.currency}
+                onToggle={toggle}
+              />
+            ))}
           </Card>
           {message.shipping ? (
             <>
