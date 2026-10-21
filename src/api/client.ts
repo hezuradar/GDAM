@@ -33,7 +33,7 @@ export function isSessionExpired(): boolean {
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
-export async function apiRequest<T>(method: Method, path: string, body?: unknown): Promise<T> {
+export async function apiRequest<T>(method: Method, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`/api${path}`, {
@@ -41,8 +41,10 @@ export async function apiRequest<T>(method: Method, path: string, body?: unknown
       credentials: 'same-origin',
       headers: body === undefined ? { Accept: 'application/json' } : { Accept: 'application/json', 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal,
     });
-  } catch {
+  } catch (e: unknown) {
+    if (e instanceof Error && e.name === 'AbortError') throw e;
     throw new ApiError(0, OFFLINE);
   }
 

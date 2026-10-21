@@ -28,7 +28,7 @@ export default function ReceptionScreen() {
   const orderId = parseIdParam(useLocalSearchParams<{ orderId: string }>().orderId);
   const theme = useTheme();
   const styles = useThemedStyles(makeStyles);
-  const { data, loading } = useOrderDetail(orderId);
+  const { data, loading, error, reload } = useOrderDetail(orderId);
   const [received, setReceived] = useState<ReadonlyMap<number, string>>(new Map());
   const [isSeeded, setSeeded] = useState(false);
   const [isSaving, setSaving] = useState(false);
@@ -41,6 +41,7 @@ export default function ReceptionScreen() {
   }, [data, isSeeded]);
 
   if (!data) {
+    if (error) return <EmptyState icon="alert-circle-outline" title="No se pudo cargar el pedido" message={error} actionLabel="Reintentar" onAction={reload} />;
     return loading ? <LoadingView /> : <EmptyState icon="help-circle-outline" title="Pedido no encontrado" message="Puede que se haya eliminado." />;
   }
   const { order, lines } = data;

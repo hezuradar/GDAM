@@ -4,7 +4,15 @@
   "main": "src/worker/index.ts",
   "compatibility_date": "2026-10-06",
   "observability": {
-    "enabled": true
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 1
+    }
   },
   // Static web app (dist/) + JSON API under /api/* handled by the Worker.
   "assets": {

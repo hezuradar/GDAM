@@ -100,7 +100,7 @@ async function handleApi(request: Request, env: WorkerEnv, ctx: ExecutionContext
     if (e instanceof HttpError) return errorResponse(e.status, e.message);
     const message = e instanceof Error ? e.message : String(e);
     if (/FOREIGN KEY|CHECK constraint/i.test(message)) return errorResponse(400, 'Datos no válidos para la base de datos');
-    console.error('API error', request.method, pathname, message);
+    console.error(JSON.stringify({ level: 'error', msg: 'api_error', method: request.method, path: pathname, error: message }));
     return errorResponse(500, 'Error interno del servidor');
   }
 }

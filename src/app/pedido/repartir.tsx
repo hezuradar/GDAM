@@ -34,7 +34,7 @@ export default function DistributeTotalScreen() {
   const orderId = parseIdParam(useLocalSearchParams<{ orderId: string }>().orderId);
   const theme = useTheme();
   const styles = useThemedStyles(makeStyles);
-  const { data, loading } = useOrderDetail(orderId);
+  const { data, loading, error, reload } = useOrderDetail(orderId);
   const [amountText, setAmountText] = useState('');
   const [includesExtras, setIncludesExtras] = useState(true);
   const [subtractExcluded, setSubtractExcluded] = useState(true);
@@ -43,6 +43,7 @@ export default function DistributeTotalScreen() {
   const [isSaving, setSaving] = useState(false);
 
   if (!data) {
+    if (error) return <EmptyState icon="alert-circle-outline" title="No se pudo cargar el pedido" message={error} actionLabel="Reintentar" onAction={reload} />;
     return loading ? <LoadingView /> : <EmptyState icon="help-circle-outline" title="Pedido no encontrado" message="Puede que se haya eliminado." />;
   }
   const { order, totals, lines } = data;
