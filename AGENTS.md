@@ -42,12 +42,17 @@ Docs: https://docs.expo.dev/eas/index.md
 
 ## Skills del proyecto
 
-Hay 4 skills del proyecto en `.opencode/skills/` (versión adaptada a este repo; tienen prioridad sobre las globales). Cargarlas con la herramienta `skill` cuando apliquen:
+Hay 5 skills del proyecto en `.opencode/skills/` (versión adaptada a este repo; tienen prioridad sobre las globales). Cargarlas con la herramienta `skill` cuando apliquen:
 
 - `react-native-patterns` — pantallas, Expo Router, params (`parseIdParam`), hooks de datos (`useLoader`), listas, estilos.
 - `react-patterns` — componentes, hooks, estado, formularios (`validate()` + `announceErrors()`), accesibilidad.
 - `verification-loop` — gate de verificación pre-commit: `npm run build`, `npm run typecheck`, `npm run test:coverage` (80%), seguridad, diff review. Commit messages en español, conventional commits.
 - `security-review` — checklist al tocar `src/worker/`, validación server-side, secretos (nunca commitear `.dev.vars`), SQL parametrizado.
+- `commit-push` — cierre de cada cambio: verifica (`typecheck`, `test:coverage`, `build`), commitea en español (conventional commits) y sube a `main`.
+
+## Al terminar cualquier cambio
+
+Ejecuta la skill `commit-push` como último paso de toda tarea que toque código, configuración o migraciones: deja el repo verificado, commiteado y subido a `main`. Si algún gate falla, no subas: arréglalo primero. Si no puedes completar algo, dilo explícitamente.
 
 ## Verificación mínima
 
