@@ -22,6 +22,15 @@ const SOURCE_LABEL: Record<string, string> = {
   manual: 'introducido a mano',
 };
 
+/** Hoisted: creating an Intl formatter inside render is expensive (js-hoist-intl). */
+const WHEN_FORMATTER = new Intl.DateTimeFormat('es-ES', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
 /** "2026-10-10" or an ISO date-time → Spanish short date (and time when present). */
 function formatWhen(value: string | null): string {
   if (!value) return '—';
@@ -30,9 +39,7 @@ function formatWhen(value: string | null): string {
   // browser would interpret it as local time and show a shifted hour.
   const normalised = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value) ? `${value.replace(' ', 'T')}Z` : value;
   const date = new Date(normalised);
-  return Number.isNaN(date.getTime())
-    ? value
-    : date.toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return Number.isNaN(date.getTime()) ? value : WHEN_FORMATTER.format(date);
 }
 
 function rateDescription(settings: AppSettings): string {

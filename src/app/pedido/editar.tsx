@@ -5,7 +5,7 @@ import { announce, announceErrors, showError } from '@/components/ui/alerts';
 import { Button } from '@/components/ui/Button';
 import { ChipGroup } from '@/components/ui/ChipGroup';
 import { DateField } from '@/components/ui/DateField';
-import { Card, EmptyState, FormScroll, SectionHeader } from '@/components/ui/Layout';
+import { Card, EmptyState, ErrorView, FormScroll, SectionHeader } from '@/components/ui/Layout';
 import { TextField } from '@/components/ui/TextField';
 import { getOrder, saveOrder } from '@/api/data';
 import { getSettings } from '@/api/data';
@@ -73,6 +73,10 @@ export default function OrderFormScreen() {
   const [defaultRate, setDefaultRate] = useState('');
   const [loadedCurrency, setLoadedCurrency] = useState<Currency | null>(null);
   const [market, setMarket] = useState<FxRates | null>(null);
+  // A failed load must not leave a plausible-looking form: saving would overwrite the
+  // existing order with the defaults. Show the error and offer a retry instead.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm((f) => ({ ...f, [key]: value }));
   /** Switching the currency of shipping or customs converts the typed amount (order rate if set, else market). */
   const changeAmountCurrency = (amountKey: 'shipping' | 'customs', currencyKey: 'shippingCurrency' | 'customsCurrency', next: Currency) =>
@@ -119,8 +123,9 @@ export default function OrderFormScreen() {
         setForm((f) => ({ ...f, currency: c, shippingCurrency: c, supplierId: f.supplierId ?? (list.length === 1 ? list[0].id : null) }));
       }
     };
-    load().catch((e: unknown) => showError('No se pudo cargar el pedido', e));
-  }, [id]);
+    setLoadError(null);
+    load().catch((e: unknown) => setLoadError(e instanceof Error ? e.message : 'No se pudo cargar el pedido'));
+  }, [id, loadAttempt]);
 
   const handleSave = async () => {
     const found = validate(form);
@@ -154,6 +159,10 @@ export default function OrderFormScreen() {
       setSaving(false);
     }
   };
+
+  if (loadError) {
+    return <ErrorView message={loadError} onRetry={() => setLoadAttempt((n) => n + 1)} />;
+  }
 
   if (suppliers && suppliers.length === 0) {
     return (

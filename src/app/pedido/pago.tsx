@@ -32,9 +32,14 @@ export default function PaymentFormScreen() {
   const [method, setMethod] = useState<PaymentMethod>('transferencia');
   const [note, setNote] = useState('');
   const [errors, setErrors] = useState<Errors>({});
+  // A failed load must not leave a plausible-looking form: saving would overwrite the
+  // existing payment with the defaults. Show the error and offer a retry instead.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   useEffect(() => {
     // Reset first: the same screen instance can move to another payment or order.
+    setLoadError(null);
     setAmount('');
     setCurrency(null);
     setRate('');
@@ -56,10 +61,11 @@ export default function PaymentFormScreen() {
         setMethod(p.method);
         setNote(p.note);
       })
-      .catch((e: unknown) => showError('No se pudo cargar el pago', e));
-  }, [id, orderId]);
+      .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : 'No se pudo cargar el pago'));
+  }, [id, orderId, loadAttempt]);
 
   if (error) return <ErrorView message={error} onRetry={reload} />;
+  if (loadError) return <ErrorView message={loadError} onRetry={() => setLoadAttempt((n) => n + 1)} />;
   if (!data) {
     return loading ? <LoadingView /> : <EmptyState icon="help-circle-outline" title="Pedido no encontrado" message="Puede que se haya eliminado." />;
   }

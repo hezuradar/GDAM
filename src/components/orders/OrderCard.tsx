@@ -78,10 +78,9 @@ const makeStyles = (theme: Theme) =>
       gap: spacing.md,
       borderWidth: theme.dark ? 1 : 0,
       borderColor: theme.colors.divider,
-      shadowColor: '#000',
-      shadowOpacity: theme.dark ? 0 : 0.06,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 2 },
+      // CSS box-shadow syntax (React Native 0.76+ / react-native-web): the legacy
+      // shadow* props are ignored on web.
+      boxShadow: theme.dark ? 'none' : '0 2px 8px rgba(0, 0, 0, 0.06)',
     },
     pressed: { opacity: 0.7 },
     header: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' },

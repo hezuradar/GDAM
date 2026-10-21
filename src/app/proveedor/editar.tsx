@@ -2,7 +2,7 @@ import { router, Stack, useLocalSearchParams, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { announce, announceErrors, showError } from '@/components/ui/alerts';
 import { Button } from '@/components/ui/Button';
-import { FormScroll } from '@/components/ui/Layout';
+import { ErrorView, FormScroll } from '@/components/ui/Layout';
 import { TextField } from '@/components/ui/TextField';
 import { getSupplier, saveSupplier } from '@/api/data';
 import { goBack, parseIdParam, safeReturnPath, whatsappDigits } from '@/lib/params';
@@ -22,9 +22,14 @@ export default function SupplierFormScreen() {
   const [nameError, setNameError] = useState<string | null>(null);
   const [whatsappError, setWhatsappError] = useState<string | null>(null);
   const [isSaving, setSaving] = useState(false);
+  // A failed load must not leave a plausible-looking form: saving would overwrite the
+  // existing supplier with the defaults. Show the error and offer a retry instead.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   useEffect(() => {
     if (id === null) return;
+    setLoadError(null);
     getSupplier(id)
       .then((s) => {
         if (!s) {
@@ -36,9 +41,13 @@ export default function SupplierFormScreen() {
         setWhatsapp(s.whatsapp);
         setNotes(s.notes);
       })
-      .catch((e: unknown) => showError('No se pudo cargar el proveedor', e));
+      .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : 'No se pudo cargar el proveedor'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, loadAttempt]);
+
+  if (loadError) {
+    return <ErrorView message={loadError} onRetry={() => setLoadAttempt((n) => n + 1)} />;
+  }
 
   const handleSave = async () => {
     const trimmed = name.trim();

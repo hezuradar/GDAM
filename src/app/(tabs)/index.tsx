@@ -48,6 +48,12 @@ function orderStats(items: readonly OrderListItem[], display: DisplayCurrency) {
   };
 }
 
+/** Stable separator component: an inline arrow would remount every separator on each render. */
+function ListSeparator() {
+  const styles = useThemedStyles(makeStyles);
+  return <View style={styles.separator} />;
+}
+
 export default function OrdersScreen() {
   const theme = useTheme();
   const styles = useThemedStyles(makeStyles);
@@ -165,7 +171,7 @@ export default function OrdersScreen() {
           <EmptyState icon="funnel-outline" title="Sin resultados" message="Ningún pedido coincide con la búsqueda o los filtros." />
         }
         contentContainerStyle={styles.list}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        ItemSeparatorComponent={ListSeparator}
       />
       <FilterSheet
         isVisible={isFilterOpen}

@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { listProducts } from '@/api/data';
 import { ChipGroup } from '@/components/ui/ChipGroup';
@@ -20,7 +20,15 @@ async function loadProducts(): Promise<ProductCost[]> {
   return computeProductCosts(products, marketRates(settings));
 }
 
-function ProductCard({ product, currency, onPress }: { product: ProductCost; currency: Currency; onPress: () => void }) {
+const ProductCard = memo(function ProductCard({
+  product,
+  currency,
+  onOpen,
+}: {
+  product: ProductCost;
+  currency: Currency;
+  onOpen: (lineId: number) => void;
+}) {
   const styles = useThemedStyles(makeStyles);
   const info = productSaleInfo(product, currency);
   const money = (cents: number, from: Currency = product.currency) => formatMoney(convert(cents, from, currency, product.rates), currency);
@@ -28,7 +36,7 @@ function ProductCard({ product, currency, onPress }: { product: ProductCost; cur
   const profit = info.salePriceCents !== null && info.landedUnitCents !== null ? info.salePriceCents - info.landedUnitCents : null;
   return (
     <Pressable
-      onPress={onPress}
+      onPress={() => onOpen(product.lineId)}
       accessibilityRole="button"
       accessibilityLabel={`${title}. Coste unitario ${info.landedUnitCents === null ? 'pendiente' : formatMoney(info.landedUnitCents, currency)}${
         info.salePriceCents !== null ? `. Venta ${formatMoney(info.salePriceCents, currency)}` : ''
@@ -80,6 +88,12 @@ function ProductCard({ product, currency, onPress }: { product: ProductCost; cur
       )}
     </Pressable>
   );
+});
+
+/** Stable separator component: an inline arrow would remount every separator on each render. */
+function ListSeparator() {
+  const styles = useThemedStyles(makeStyles);
+  return <View style={styles.separator} />;
 }
 
 export default function ProductsScreen() {
@@ -92,6 +106,12 @@ export default function ProductsScreen() {
     return (data ?? []).filter((p) => foldText(`${p.pieceType} ${p.measurements} ${p.supplierName} ${p.orderId}`).includes(folded));
   }, [data, query]);
   const open = useCallback((lineId: number) => router.push({ pathname: '/producto/[id]', params: { id: lineId } }), []);
+  // Stable renderItem: a new function every render would re-render every visible card on
+  // each keystroke in the search box.
+  const renderItem = useCallback(
+    ({ item }: { item: ProductCost }) => <ProductCard product={item} currency={currency} onOpen={open} />,
+    [currency, open],
+  );
 
   if (error) return <ErrorView message={error} onRetry={reload} />;
   if (!data && loading) return <LoadingView />;
@@ -106,7 +126,7 @@ export default function ProductsScreen() {
       contentContainerStyle={styles.list}
       data={visible}
       keyExtractor={(p) => String(p.lineId)}
-      ItemSeparatorComponent={() => <View style={styles.separator} />}
+      ItemSeparatorComponent={ListSeparator}
       ListHeaderComponent={
         <View style={styles.header}>
           <ChipGroup<Currency>
@@ -121,7 +141,7 @@ export default function ProductsScreen() {
           </Text>
         </View>
       }
-      renderItem={({ item }) => <ProductCard product={item} currency={currency} onPress={() => open(item.lineId)} />}
+      renderItem={renderItem}
     />
   );
 }

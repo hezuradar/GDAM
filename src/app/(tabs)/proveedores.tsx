@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { CONTENT_MAX_WIDTH, EmptyState, ErrorView, LoadingView, PressableRow } from '@/components/ui/Layout';
 import { TextField } from '@/components/ui/TextField';
@@ -9,6 +9,36 @@ import { foldText } from '@/domain/orderFilters';
 import { useLoader } from '@/hooks/useLoader';
 import { radius, spacing, typography, useThemedStyles, type Theme } from '@/theme/theme';
 
+type Supplier = Awaited<ReturnType<typeof listSuppliers>>[number];
+
+const SupplierCard = memo(function SupplierCard({ supplier, onOpen }: { supplier: Supplier; onOpen: (id: number) => void }) {
+  const styles = useThemedStyles(makeStyles);
+  return (
+    <View style={styles.card}>
+      <PressableRow
+        onPress={() => onOpen(supplier.id)}
+        accessibilityLabel={`${supplier.name}${supplier.whatsapp ? `, WhatsApp ${supplier.whatsapp}` : ''}`}
+        accessibilityHint="Abre el proveedor y sus pedidos"
+      >
+        <View style={styles.row}>
+          <Avatar name={supplier.name} />
+          <View style={styles.info}>
+            <Text style={styles.name}>{supplier.name}</Text>
+            {supplier.whatsapp ? <IconText icon="logo-whatsapp">{supplier.whatsapp}</IconText> : null}
+            {supplier.notes ? <IconText icon="document-text-outline">{supplier.notes}</IconText> : null}
+          </View>
+        </View>
+      </PressableRow>
+    </View>
+  );
+});
+
+/** Stable separator component: an inline arrow would remount every separator on each render. */
+function ListSeparator() {
+  const styles = useThemedStyles(makeStyles);
+  return <View style={styles.separator} />;
+}
+
 export default function SuppliersScreen() {
   const styles = useThemedStyles(makeStyles);
   const { data, error, loading, reload } = useLoader(listSuppliers);
@@ -17,6 +47,10 @@ export default function SuppliersScreen() {
     const folded = foldText(query.trim());
     return (data ?? []).filter((s) => foldText(`${s.name} ${s.notes}`).includes(folded));
   }, [data, query]);
+  const open = useCallback((id: number) => router.push({ pathname: '/proveedor/[id]', params: { id } }), []);
+  // Stable renderItem: a new function every render would re-render every visible row on
+  // each keystroke in the search box.
+  const renderItem = useCallback(({ item }: { item: Supplier }) => <SupplierCard supplier={item} onOpen={open} />, [open]);
 
   if (error) return <ErrorView message={error} onRetry={reload} />;
   if (!data && loading) return <LoadingView />;
@@ -44,25 +78,8 @@ export default function SuppliersScreen() {
           <TextField label="Buscar proveedor" value={query} onChangeText={setQuery} autoCorrect={false} inputMode="search" enterKeyHint="search" />
         </View>
       }
-      ItemSeparatorComponent={() => <View style={styles.separator} />}
-      renderItem={({ item }) => (
-        <View style={styles.card}>
-          <PressableRow
-            onPress={() => router.push({ pathname: '/proveedor/[id]', params: { id: item.id } })}
-            accessibilityLabel={`${item.name}${item.whatsapp ? `, WhatsApp ${item.whatsapp}` : ''}`}
-            accessibilityHint="Abre el proveedor y sus pedidos"
-          >
-            <View style={styles.row}>
-              <Avatar name={item.name} />
-              <View style={styles.info}>
-                <Text style={styles.name}>{item.name}</Text>
-                {item.whatsapp ? <IconText icon="logo-whatsapp">{item.whatsapp}</IconText> : null}
-                {item.notes ? <IconText icon="document-text-outline">{item.notes}</IconText> : null}
-              </View>
-            </View>
-          </PressableRow>
-        </View>
-      )}
+      ItemSeparatorComponent={ListSeparator}
+      renderItem={renderItem}
     />
   );
 }

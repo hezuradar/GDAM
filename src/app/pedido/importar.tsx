@@ -41,6 +41,14 @@ export default function ImportScreen() {
   const message = useMemo(() => parseWhatsAppMessage(text), [text]);
   const parsed = message.lines;
   const [applyShipping, setApplyShipping] = useState(true);
+  // The parsed message is memoized, so the default exclusions are derived from it instead of
+  // parsing the text a second time on every keystroke. When the text changes, the manual
+  // exclusions are reset to the defaults of the new parse (adjust state during render).
+  const [excludedFor, setExcludedFor] = useState(message);
+  if (excludedFor !== message) {
+    setExcludedFor(message);
+    setExcluded(defaultExcluded(message.lines));
+  }
 
   if (!data) {
     if (error) return <EmptyState icon="alert-circle-outline" title="No se pudo cargar el pedido" message={error} actionLabel="Reintentar" onAction={reload} />;
@@ -48,10 +56,7 @@ export default function ImportScreen() {
   }
   const { order, totals, lines: existing } = data;
 
-  const updateText = (value: string) => {
-    setText(value);
-    setExcluded(defaultExcluded(parseWhatsAppMessage(value).lines));
-  };
+  const updateText = (value: string) => setText(value);
   const toggle = (index: number) =>
     setExcluded((prev) => {
       const next = new Set(prev);

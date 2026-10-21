@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { announce, announceErrors, confirmDestructive, showError } from '@/components/ui/alerts';
 import { Button } from '@/components/ui/Button';
-import { EmptyState, FormScroll } from '@/components/ui/Layout';
+import { EmptyState, ErrorView, FormScroll } from '@/components/ui/Layout';
 import { TextField } from '@/components/ui/TextField';
 import { deleteLine, getLine, saveLine } from '@/api/data';
 import { getOrder } from '@/api/data';
@@ -28,9 +28,14 @@ export default function LineFormScreen() {
   const [rawText, setRawText] = useState('');
   const [errors, setErrors] = useState<Errors>({});
   const [isSaving, setSaving] = useState(false);
+  // A failed load must not leave a plausible-looking form: saving would overwrite the
+  // existing line with the defaults. Show the error and offer a retry instead.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   useEffect(() => {
     if (orderId === null) return;
+    setLoadError(null);
     const load = async () => {
       const [order, line] = await Promise.all([getOrder(orderId), id ? getLine(id) : null]);
       if (!order || (id !== null && !line)) {
@@ -47,11 +52,15 @@ export default function LineFormScreen() {
         setRawText(line.rawText);
       }
     };
-    load().catch((e: unknown) => showError('No se pudo cargar la línea', e));
-  }, [orderId, id]);
+    load().catch((e: unknown) => setLoadError(e instanceof Error ? e.message : 'No se pudo cargar la línea'));
+  }, [orderId, id, loadAttempt]);
 
   if (orderId === null) {
     return <EmptyState icon="help-circle-outline" title="Pedido no encontrado" message="Falta el identificador del pedido." />;
+  }
+
+  if (loadError) {
+    return <ErrorView message={loadError} onRetry={() => setLoadAttempt((n) => n + 1)} />;
   }
 
   const handleSave = async () => {
