@@ -10,8 +10,10 @@ const order = (overrides: Partial<Order>): Order => ({
   currency: 'EUR',
   shippingCents: 0,
   shippingCurrency: 'EUR',
+  shippingSnapshot: null,
   customsCents: 0,
   customsCurrency: 'EUR',
+  customsSnapshot: null,
   fxRateMicros: null,
   carrier: 'DHL',
   trackingNumber: 'JD1',
@@ -27,7 +29,7 @@ describe('buildOrderListItems', () => {
         { orderId: 1, quantity: 2, unitPriceCents: 1000, pieceType: 'tubo', measurements: '25x2' },
         { orderId: 1, quantity: 1, unitPriceCents: null, pieceType: 'brida', measurements: 'DN50' },
       ],
-      payments: [{ orderId: 1, amountCents: 1000, currency: 'EUR', fxRateMicros: null }],
+      payments: [{ orderId: 1, amountCents: 1000, currency: 'EUR', snapshot: null }],
       supplierNames: new Map([[1, 'Aceros'], [2, 'Tubos']]),
       marketRates: { usdMicros: 1_080_000, inrMicros: 100_000_000 },
     });
@@ -51,7 +53,7 @@ describe('buildOrderListItems', () => {
     const [withPayment, onlyCustoms] = buildOrderListItems({
       orders: [order({ id: 1, shippingCents: 500, customsCents: 300 }), order({ id: 2, customsCents: 400 })],
       lines: [{ orderId: 1, quantity: 1, unitPriceCents: 1000, pieceType: 'tubo', measurements: '' }],
-      payments: [{ orderId: 1, amountCents: 1000, currency: 'EUR', fxRateMicros: null }],
+      payments: [{ orderId: 1, amountCents: 1000, currency: 'EUR', snapshot: null }],
       supplierNames: new Map(),
       marketRates: { usdMicros: 1_000_000, inrMicros: 100_000_000 },
     });

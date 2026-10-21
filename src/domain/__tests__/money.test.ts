@@ -1,4 +1,4 @@
-import { convert, convertInput, currencySymbol, displayAmount, formatMoney, formatRate, marketRates, parseAmount, parseRate, withUsdRate } from '../money';
+import { amountRates, convert, convertInput, currencySymbol, displayAmount, formatMoney, formatRate, marketRates, parseAmount, parseRate, withUsdRate } from '../money';
 
 describe('parseAmount', () => {
   it.each([
@@ -120,6 +120,35 @@ describe('Indian rupee', () => {
 
   it('throws when the rupee rate is missing', () => {
     expect(() => convert(100, 'INR', 'EUR', { usdMicros: 1_100_000, inrMicros: 0 })).toThrow();
+  });
+});
+
+describe('amountRates (rates frozen with an amount)', () => {
+  const market = { usdMicros: 1_100_000, inrMicros: 100_000_000 };
+
+  it('falls back to the market when the amount was saved before the rates were frozen', () => {
+    expect(amountRates(market, null, null)).toEqual(market);
+  });
+
+  it('uses the rates frozen with the amount', () => {
+    expect(amountRates(market, { usdMicros: 1_050_000, inrMicros: 95_000_000 }, null)).toEqual({
+      usdMicros: 1_050_000,
+      inrMicros: 95_000_000,
+    });
+  });
+
+  it('gives the rate fixed for the order priority over the frozen one', () => {
+    expect(amountRates(market, { usdMicros: 1_050_000, inrMicros: 95_000_000 }, 1_200_000)).toEqual({
+      usdMicros: 1_200_000,
+      inrMicros: 95_000_000,
+    });
+  });
+
+  it('falls back to the market for a part that was not frozen', () => {
+    expect(amountRates(market, { usdMicros: null, inrMicros: 95_000_000 }, null)).toEqual({
+      usdMicros: 1_100_000,
+      inrMicros: 95_000_000,
+    });
   });
 });
 

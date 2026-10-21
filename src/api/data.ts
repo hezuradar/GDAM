@@ -1,6 +1,15 @@
 import type { ProductSource } from '@/domain/landedCost';
 import type { ListLine, ListPayment } from '@/domain/orderList';
-import type { Currency, Order, OrderLine, OrderStatus, Payment, Supplier } from '@/domain/types';
+import type {
+  Currency,
+  Order,
+  OrderInput,
+  OrderLine,
+  OrderStatus,
+  Payment,
+  PaymentInput,
+  Supplier,
+} from '@/domain/types';
 import { apiRequest, getOrNull } from './client';
 
 /** Typed data access through the API. Same operations the on-device repositories used to offer. */
@@ -19,9 +28,8 @@ export interface AppSettings {
 }
 
 export type SupplierInput = Omit<Supplier, 'id'>;
-export type OrderInput = Omit<Order, 'id'>;
+export type { OrderInput, PaymentInput };
 export type LineInput = Pick<OrderLine, 'quantity' | 'pieceType' | 'measurements' | 'unitPriceCents' | 'rawText'>;
-export type PaymentInput = Omit<Payment, 'id' | 'orderId'>;
 
 export interface OrderListRaw {
   readonly orders: readonly Order[];

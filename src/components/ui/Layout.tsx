@@ -36,19 +36,22 @@ export function SectionHeader({ title, action, icon }: { title: string; action?:
   );
 }
 
-type InfoRowProps = { label: string; value: string; isStrong?: boolean; icon?: IconName };
+type InfoRowProps = { label: string; value: string; isStrong?: boolean; icon?: IconName; detail?: string };
 
 /** Label/value row; read by VoiceOver as one element. */
-export function InfoRow({ label, value, isStrong = false, icon }: InfoRowProps) {
+export function InfoRow({ label, value, isStrong = false, icon, detail }: InfoRowProps) {
   const styles = useThemedStyles(makeStyles);
   const theme = useTheme();
   return (
-    <View style={styles.infoRow} accessible accessibilityLabel={`${label}: ${value}`}>
-      <View style={styles.sectionTitleRow}>
-        {icon ? <Ionicons name={icon} size={18} color={theme.colors.textSecondary} /> : null}
-        <Text style={[styles.infoLabel, isStrong && styles.strong]}>{label}</Text>
+    <View accessible accessibilityLabel={`${label}: ${value}`}>
+      <View style={styles.infoRow}>
+        <View style={styles.sectionTitleRow}>
+          {icon ? <Ionicons name={icon} size={18} color={theme.colors.textSecondary} /> : null}
+          <Text style={[styles.infoLabel, isStrong && styles.strong]}>{label}</Text>
+        </View>
+        <Text style={[styles.infoValue, isStrong && styles.strong]}>{value}</Text>
       </View>
-      <Text style={[styles.infoValue, isStrong && styles.strong]}>{value}</Text>
+      {detail ? <Text style={styles.infoDetail}>{detail}</Text> : null}
     </View>
   );
 }
@@ -142,6 +145,7 @@ const makeStyles = (theme: Theme) =>
     infoRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md, flexWrap: 'wrap' },
     infoLabel: { ...typography.body, color: theme.colors.textSecondary, flexShrink: 1 },
     infoValue: { ...typography.body, color: theme.colors.text, fontVariant: ['tabular-nums'] },
+    infoDetail: { ...typography.footnote, color: theme.colors.textSecondary },
     strong: { fontWeight: '700', color: theme.colors.text },
     pressableRow: {
       flexDirection: 'row',

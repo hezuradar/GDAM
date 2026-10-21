@@ -28,6 +28,8 @@ export default function PaymentFormScreen() {
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState<Currency | null>(null);
   const [rate, setRate] = useState('');
+  /** Rate frozen with the payment being edited (null = a new payment). */
+  const [frozenRate, setFrozenRate] = useState<number | null>(null);
   const [paidOn, setPaidOn] = useState(todayIso());
   const [method, setMethod] = useState<PaymentMethod>('transferencia');
   const [note, setNote] = useState('');
@@ -43,6 +45,7 @@ export default function PaymentFormScreen() {
     setAmount('');
     setCurrency(null);
     setRate('');
+    setFrozenRate(null);
     setPaidOn(todayIso());
     setMethod('transferencia');
     setNote('');
@@ -56,7 +59,9 @@ export default function PaymentFormScreen() {
         }
         setAmount(centsToInput(p.amountCents));
         setCurrency(p.currency);
-        setRate(p.fxRateMicros ? formatRate(p.fxRateMicros) : '');
+        // The rate the payment was registered with: it stays frozen unless the user changes it.
+        setFrozenRate(p.snapshot?.usdMicros ?? null);
+        setRate(p.snapshot?.usdMicros ? formatRate(p.snapshot.usdMicros) : '');
         setPaidOn(p.paidOn);
         setMethod(p.method);
         setNote(p.note);
@@ -74,7 +79,9 @@ export default function PaymentFormScreen() {
   const isForeign = payCurrency !== order.currency;
   // A bank EUR↔USD rate can be frozen on the payment; rupee payments always use the market rate.
   const isEurUsdPair = isForeign && payCurrency !== 'INR' && order.currency !== 'INR';
-  const rateMicros = isEurUsdPair ? (parseRate(rate) ?? totals.rates.usdMicros) : null;
+  // What the payment is worth with: the typed rate, else the rate it was registered with,
+  // else the order's rate (the server freezes the same one when it saves).
+  const rateMicros = isEurUsdPair ? (parseRate(rate) ?? frozenRate ?? totals.rates.usdMicros) : null;
   const paymentRates = withUsdRate(totals.rates, rateMicros);
   const amountCents = parseAmount(amount);
   const fillPending = (fraction: number) =>
@@ -95,7 +102,11 @@ export default function PaymentFormScreen() {
     if (!announceErrors(found) || amountCents === null || isSaving) return;
     setSaving(true);
     try {
-      await savePayment(order.id, { amountCents, currency: payCurrency, paidOn, method, fxRateMicros: rateMicros, note }, id);
+      await savePayment(
+        order.id,
+        { amountCents, currency: payCurrency, paidOn, method, fxRateMicros: isEurUsdPair ? parseRate(rate) : null, note },
+        id,
+      );
       announce('Pago guardado');
       goBack();
     } catch (e: unknown) {
@@ -143,7 +154,7 @@ export default function PaymentFormScreen() {
               keyboardType="decimal-pad"
               placeholder={formatRate(totals.rates.usdMicros)}
               error={errors.rate}
-              hint="El del banco, si lo sabes. Vacío = cambio del pedido."
+              hint="El del banco, si lo sabes. Vacío = el cambio con el que se registró."
             />
           ) : (
             <Text style={styles.equivalent}>Cambio de mercado: 1 € = {formatRate(totals.rates.inrMicros)} ₹</Text>

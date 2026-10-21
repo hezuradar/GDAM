@@ -24,11 +24,28 @@ export function TotalsCard({ totals, payment, currency, usesOrderRate }: TotalsC
   };
   const isConverted = display !== null && display !== currency;
   const rateSource = usesOrderRate ? 'fijado en el pedido' : 'de mercado';
+  /** The rate an amount was frozen with, when it is not the one used for the whole order. */
+  const frozenDetail = (rates: FxRates) => {
+    const parts: string[] = [];
+    if (rates.usdMicros !== totals.rates.usdMicros) parts.push(`1 € = ${formatRate(rates.usdMicros)} US$`);
+    if (rates.inrMicros !== totals.rates.inrMicros) parts.push(`1 € = ${formatRate(rates.inrMicros)} ₹`);
+    return parts.length > 0 ? `Cambio congelado: ${parts.join(' · ')}` : undefined;
+  };
   return (
     <Card>
       <InfoRow icon="cube-outline" label="Mercancía" value={money(totals.goodsCents)} />
-      <InfoRow icon="airplane-outline" label="Envío" value={money(totals.shippingCents)} />
-      <InfoRow icon="shield-checkmark-outline" label="Aduanas" value={money(totals.customsCents)} />
+      <InfoRow
+        icon="airplane-outline"
+        label="Envío"
+        value={money(totals.shippingCents)}
+        detail={frozenDetail(totals.shippingRates)}
+      />
+      <InfoRow
+        icon="shield-checkmark-outline"
+        label="Aduanas"
+        value={money(totals.customsCents)}
+        detail={frozenDetail(totals.customsRates)}
+      />
       <View style={styles.divider} />
       <InfoRow
         icon="receipt-outline"

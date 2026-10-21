@@ -22,16 +22,21 @@ const row = (overrides: Partial<ProductSource>): ProductSource => ({
   currency: 'USD',
   shippingCents: 0,
   shippingCurrency: 'USD',
+  shippingSnapshot: null,
   customsCents: 0,
   customsCurrency: 'USD',
+  customsSnapshot: null,
   fxRateMicros: null,
   salePriceCents: null,
   saleCurrency: null,
+  saleSnapshot: null,
   marginBp: null,
   theoreticalCostCents: null,
   theoreticalCurrency: null,
+  theoreticalSnapshot: null,
   handlingCostCents: null,
   handlingCurrency: null,
+  handlingSnapshot: null,
   ...overrides,
 });
 
@@ -148,6 +153,34 @@ describe('sale price and margin (markup over cost)', () => {
   it('returns nulls when nothing is set or the cost is unknown', () => {
     const [p] = computeProductCosts([row({ unitPriceCents: null, marginBp: 5000 })], RATE);
     expect(productSaleInfo(p, 'EUR')).toEqual({ currency: 'EUR', landedUnitCents: null, salePriceCents: null, marginBp: 5000 });
+  });
+});
+
+describe('rates frozen with each amount', () => {
+  const frozen = { usdMicros: 1_000_000, inrMicros: 100_000_000 }; // 1 € = 1 US$ (el mercado da 1,10)
+
+  it('converts the theoretical value with the rates it was frozen with', () => {
+    const [line] = computeProductCosts(
+      [row({ unitPriceCents: 0, theoreticalCostCents: 200, theoreticalCurrency: 'EUR', theoreticalSnapshot: frozen })],
+      RATE,
+    );
+    expect(line.landedUnitCents).toBe(200); // 2,00 € a 1,00 US$/€ (el mercado daría 2,20)
+  });
+
+  it('converts the handling cost with the rates it was frozen with', () => {
+    const [line] = computeProductCosts([row({ handlingCostCents: 100, handlingCurrency: 'EUR', handlingSnapshot: frozen })], RATE);
+    expect(line).toMatchObject({ handlingPerUnitCents: 100, landedUnitCents: 200 });
+  });
+
+  it('converts the sale price with the rates it was frozen with', () => {
+    const [p] = computeProductCosts([row({ salePriceCents: 330, saleCurrency: 'EUR', saleSnapshot: frozen })], RATE);
+    expect(productSaleInfo(p, 'USD').salePriceCents).toBe(330); // 3,30 € a 1,00 US$/€
+  });
+
+  it('does not drift when the market moves', () => {
+    const rows = [row({ handlingCostCents: 100, handlingCurrency: 'EUR', handlingSnapshot: frozen })];
+    expect(computeProductCosts(rows, RATE)[0].handlingPerUnitCents).toBe(100);
+    expect(computeProductCosts(rows, { usdMicros: 900_000, inrMicros: 110_000_000 })[0].handlingPerUnitCents).toBe(100);
   });
 });
 

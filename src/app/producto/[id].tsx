@@ -89,8 +89,11 @@ export default function ProductPricingScreen() {
     const initial = productSaleInfo(product, 'EUR');
     setSaleText(initial.salePriceCents === null ? '' : centsToInput(initial.salePriceCents));
     setMarginText(marginToInput(initial.marginBp));
-    setTheoreticalText(storedToInput(product.theoreticalCostCents, product.theoreticalCurrency ?? product.currency, product.rates));
-    setHandlingText(storedToInput(product.handlingCostCents, product.handlingCurrency ?? product.currency, product.rates));
+    // Each stored amount is shown with the rates it was frozen with, so the field shows what it was worth.
+    setTheoreticalText(
+      storedToInput(product.theoreticalCostCents, product.theoreticalCurrency ?? product.currency, product.theoreticalRates),
+    );
+    setHandlingText(storedToInput(product.handlingCostCents, product.handlingCurrency ?? product.currency, product.handlingRates));
   }, [product]);
 
   if (error) return <ErrorView message={error} onRetry={reload} />;

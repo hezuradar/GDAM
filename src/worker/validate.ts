@@ -4,10 +4,10 @@ import {
   ORDER_STATUSES,
   PAYMENT_METHODS,
   type Currency,
-  type Order,
+  type OrderInput,
   type OrderLine,
   type OrderStatus,
-  type Payment,
+  type PaymentInput,
   type PaymentMethod,
   type Supplier,
 } from '../domain/types';
@@ -16,9 +16,8 @@ import { badRequest } from './http';
 /** Server-side validation of every API input. Never trust the client. */
 
 export type SupplierInput = Omit<Supplier, 'id'>;
-export type OrderInput = Omit<Order, 'id'>;
+export type { OrderInput, PaymentInput };
 export type LineInput = Pick<OrderLine, 'quantity' | 'pieceType' | 'measurements' | 'unitPriceCents' | 'rawText'>;
-export type PaymentInput = Omit<Payment, 'id' | 'orderId'>;
 export interface SettingsInput {
   readonly defaultCurrency: Currency;
   readonly fxAuto: boolean;

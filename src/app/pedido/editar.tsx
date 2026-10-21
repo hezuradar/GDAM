@@ -18,7 +18,10 @@ import { goBack, parseIdParam } from '@/lib/params';
 import { typography, useThemedStyles, type Theme } from '@/theme/theme';
 
 const makeStyles = (theme: Theme) =>
-  StyleSheet.create({ warning: { ...typography.footnote, color: theme.colors.warning.fg, fontWeight: '600' } });
+  StyleSheet.create({
+    warning: { ...typography.footnote, color: theme.colors.warning.fg, fontWeight: '600' },
+    note: { ...typography.footnote, color: theme.colors.textSecondary },
+  });
 
 interface FormState {
   supplierId: number | null;
@@ -209,6 +212,9 @@ export default function OrderFormScreen() {
         <ChipGroup<Currency> label="Moneda de aduanas" value={form.customsCurrency} options={currencyOptions} onChange={(v) => changeAmountCurrency('customs', 'customsCurrency', v)} />
         <TextField label="Transportista" value={form.carrier} onChangeText={(v) => set('carrier', v)} placeholder="DHL, FedEx, SF Express…" />
         <TextField label="Número de seguimiento" value={form.trackingNumber} onChangeText={(v) => set('trackingNumber', v)} autoCapitalize="characters" autoCorrect={false} />
+        <Text style={styles.note}>
+          Cada importe guarda el cambio del momento en que se escribe. Si no lo vuelves a tocar, conserva el que tenía.
+        </Text>
       </Card>
 
       <SectionHeader title="Otros" />
@@ -220,7 +226,7 @@ export default function OrderFormScreen() {
           keyboardType="decimal-pad"
           placeholder={defaultRate}
           error={errors.rate}
-          hint={`Vacío = usar el cambio de Ajustes (${defaultRate})`}
+          hint={`Vacío = usar el cambio de Ajustes (${defaultRate}). Si lo cambias, el pedido se vuelve a valorar con el nuevo cambio.`}
         />
         <TextField label="Notas" value={form.notes} onChangeText={(v) => set('notes', v)} multiline maxLength={2000} />
       </Card>

@@ -10,6 +10,17 @@ export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 export const PAYMENT_METHODS = ['transferencia', 'tarjeta', 'efectivo', 'paypal', 'otro'] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
+/**
+ * Exchange rates frozen when an amount was entered: "1 EUR = X USD" and "1 EUR = Y INR", both * 1e6.
+ * Every amount that keeps its own currency stores the rates that were in force when it was written,
+ * so its cost does not drift when the market moves. A null part means the amount was saved before
+ * the rates were frozen.
+ */
+export interface FxSnapshot {
+  readonly usdMicros: number | null;
+  readonly inrMicros: number | null;
+}
+
 /** Amounts are integer cents. Exchange rates are "1 EUR = X USD" stored as X * 1e6. */
 export interface Supplier {
   readonly id: number;
@@ -26,8 +37,13 @@ export interface Order {
   readonly currency: Currency;
   readonly shippingCents: number;
   readonly shippingCurrency: Currency;
+  /** Rates frozen when the shipping was entered. */
+  readonly shippingSnapshot: FxSnapshot | null;
   readonly customsCents: number;
   readonly customsCurrency: Currency;
+  /** Rates frozen when the customs were entered. */
+  readonly customsSnapshot: FxSnapshot | null;
+  /** Rate the user fixed for this order (1 EUR = X USD); null = the market rate. */
   readonly fxRateMicros: number | null;
   readonly carrier: string;
   readonly trackingNumber: string;
@@ -52,8 +68,40 @@ export interface Payment {
   readonly orderId: number;
   readonly amountCents: number;
   readonly currency: Currency;
+  /** Rates frozen when the payment was entered (the bank rate, the order's rate or the market). */
+  readonly snapshot: FxSnapshot | null;
   readonly paidOn: string;
   readonly method: PaymentMethod;
+  readonly note: string;
+}
+
+/**
+ * What the client sends to create or update an order. The frozen rates are the server's business:
+ * they are stamped when the amount is written, never sent by the client.
+ */
+export interface OrderInput {
+  readonly supplierId: number;
+  readonly orderDate: string;
+  readonly status: OrderStatus;
+  readonly currency: Currency;
+  readonly shippingCents: number;
+  readonly shippingCurrency: Currency;
+  readonly customsCents: number;
+  readonly customsCurrency: Currency;
+  /** Rate fixed for this order (1 EUR = X USD); null = the market rate. */
+  readonly fxRateMicros: number | null;
+  readonly carrier: string;
+  readonly trackingNumber: string;
+  readonly notes: string;
+}
+
+/** What the client sends to create or update a payment. */
+export interface PaymentInput {
+  readonly amountCents: number;
+  readonly currency: Currency;
+  readonly paidOn: string;
+  readonly method: PaymentMethod;
+  /** EUR→USD rate to freeze with the payment; null = the server freezes the effective one. */
   readonly fxRateMicros: number | null;
   readonly note: string;
 }

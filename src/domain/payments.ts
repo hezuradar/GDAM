@@ -1,10 +1,10 @@
-import { convert, withUsdRate, type FxRates } from './money';
+import { amountRates, convert, type FxRates } from './money';
 import type { Currency, Payment, PaymentStatus } from './types';
 
 /** Differences of up to 1 cent (rounding after conversions) count as fully paid. */
 const PAID_TOLERANCE_CENTS = 1;
 
-export type PaymentMoneyFields = Pick<Payment, 'amountCents' | 'currency' | 'fxRateMicros'>;
+export type PaymentMoneyFields = Pick<Payment, 'amountCents' | 'currency' | 'snapshot'>;
 
 export interface PaymentSummary {
   readonly status: PaymentStatus;
@@ -13,14 +13,14 @@ export interface PaymentSummary {
   readonly overpaidCents: number;
 }
 
-/** Sum of payments in the order currency, each converted at its own rate when it has one. */
+/** Sum of payments in the order currency, each converted at the rates frozen when it was entered. */
 export function paidCents(
   payments: readonly PaymentMoneyFields[],
   orderCurrency: Currency,
   orderRates: FxRates,
 ): number {
   return payments.reduce(
-    (sum, p) => sum + convert(p.amountCents, p.currency, orderCurrency, withUsdRate(orderRates, p.fxRateMicros)),
+    (sum, p) => sum + convert(p.amountCents, p.currency, orderCurrency, amountRates(orderRates, p.snapshot, null)),
     0,
   );
 }

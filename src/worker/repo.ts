@@ -1,7 +1,16 @@
 import type { FxQuote } from '../domain/fxRate';
 import { plural } from '../domain/exportText';
 import { convert, marketRates, withUsdRate } from '../domain/money';
-import { CURRENCIES, type Currency, type Order, type OrderLine, type OrderStatus, type Payment, type Supplier } from '../domain/types';
+import {
+  CURRENCIES,
+  type Currency,
+  type FxSnapshot,
+  type Order,
+  type OrderLine,
+  type OrderStatus,
+  type Payment,
+  type Supplier,
+} from '../domain/types';
 import { HttpError, notFound } from './http';
 import type { ImportInput, LineInput, LinePricesInput, LinePricingInput, ReceptionInput, OrderInput, PaymentInput, SettingsInput, SupplierInput } from './validate';
 
@@ -14,6 +23,8 @@ interface OrderRow {
   id: number; supplier_id: number; order_date: string; status: OrderStatus; currency: Currency;
   shipping_cents: number; shipping_currency: Currency; customs_cents: number; customs_currency: Currency;
   fx_rate_micros: number | null; carrier: string; tracking_number: string; notes: string;
+  shipping_fx_rate_micros: number | null; shipping_inr_rate_micros: number | null;
+  customs_fx_rate_micros: number | null; customs_inr_rate_micros: number | null;
 }
 interface LineRow {
   id: number; order_id: number; position: number; quantity: number; piece_type: string;
@@ -21,8 +32,12 @@ interface LineRow {
 }
 interface PaymentRow {
   id: number; order_id: number; amount_cents: number; currency: Currency; paid_on: string;
-  method: Payment['method']; fx_rate_micros: number | null; note: string;
+  method: Payment['method']; fx_rate_micros: number | null; note: string; inr_rate_micros: number | null;
 }
+
+/** The rates frozen with an amount, or null when it was saved before they were frozen. */
+const frozenRates = (usdMicros: number | null, inrMicros: number | null): FxSnapshot | null =>
+  usdMicros === null && inrMicros === null ? null : { usdMicros, inrMicros };
 
 const toSupplier = (r: SupplierRow): Supplier => ({ id: r.id, name: r.name, whatsapp: r.whatsapp, notes: r.notes });
 const toOrder = (r: OrderRow): Order => ({
@@ -30,6 +45,8 @@ const toOrder = (r: OrderRow): Order => ({
   shippingCents: r.shipping_cents, shippingCurrency: r.shipping_currency, customsCents: r.customs_cents,
   customsCurrency: r.customs_currency, fxRateMicros: r.fx_rate_micros, carrier: r.carrier,
   trackingNumber: r.tracking_number, notes: r.notes,
+  shippingSnapshot: frozenRates(r.shipping_fx_rate_micros, r.shipping_inr_rate_micros),
+  customsSnapshot: frozenRates(r.customs_fx_rate_micros, r.customs_inr_rate_micros),
 });
 const toLine = (r: LineRow): OrderLine => ({
   id: r.id, orderId: r.order_id, position: r.position, quantity: r.quantity, pieceType: r.piece_type,
@@ -37,14 +54,15 @@ const toLine = (r: LineRow): OrderLine => ({
 });
 const toPayment = (r: PaymentRow): Payment => ({
   id: r.id, orderId: r.order_id, amountCents: r.amount_cents, currency: r.currency, paidOn: r.paid_on,
-  method: r.method, fxRateMicros: r.fx_rate_micros, note: r.note,
+  method: r.method, snapshot: frozenRates(r.fx_rate_micros, r.inr_rate_micros), note: r.note,
 });
 
 const SUPPLIER_COLUMNS = 'id, name, whatsapp, notes';
 const ORDER_COLUMNS = `id, supplier_id, order_date, status, currency, shipping_cents, shipping_currency,
-  customs_cents, customs_currency, fx_rate_micros, carrier, tracking_number, notes`;
+  customs_cents, customs_currency, fx_rate_micros, carrier, tracking_number, notes,
+  shipping_fx_rate_micros, shipping_inr_rate_micros, customs_fx_rate_micros, customs_inr_rate_micros`;
 const LINE_COLUMNS = 'id, order_id, position, quantity, piece_type, measurements, unit_price_cents, raw_text, received_quantity';
-const PAYMENT_COLUMNS = 'id, order_id, amount_cents, currency, paid_on, method, fx_rate_micros, note';
+const PAYMENT_COLUMNS = 'id, order_id, amount_cents, currency, paid_on, method, fx_rate_micros, note, inr_rate_micros';
 
 async function all<T>(db: D1Database, sql: string, ...params: unknown[]): Promise<T[]> {
   return (await db.prepare(sql).bind(...params).all<T>()).results;
@@ -106,26 +124,46 @@ export async function getOrder(db: D1Database, id: number): Promise<Order | null
   return row ? toOrder(row) : null;
 }
 
-function orderParams(input: OrderInput): unknown[] {
-  return [
-    input.supplierId, input.orderDate, input.status, input.currency, input.shippingCents, input.shippingCurrency,
-    input.customsCents, input.customsCurrency, input.fxRateMicros, input.carrier, input.trackingNumber, input.notes,
-  ];
-}
-
 async function requireSupplier(db: D1Database, supplierId: number): Promise<void> {
   if (!(await getSupplier(db, supplierId))) throw new HttpError(400, 'El proveedor no existe');
 }
 
+/** The rates frozen with an amount: both parts are present when it is written. */
+type FrozenRates = { usdMicros: number; inrMicros: number };
+
+/**
+ * The rates to freeze with an amount that is written right now: the order's fixed rate when it has
+ * one, else the market rate. The client never sends them: the server stamps them when it writes.
+ */
+async function currentSnapshot(db: D1Database, orderFxRateMicros: number | null): Promise<FrozenRates> {
+  const settings = await getSettings(db);
+  return { usdMicros: orderFxRateMicros ?? settings.fxRateMicros, inrMicros: settings.inrRateMicros };
+}
+
+/**
+ * Re-values an amount when the order's fixed EUR→USD rate changes: only that part changes, the
+ * rupee keeps the rate it was frozen with (the order's fixed rate says nothing about it).
+ */
+const revalued = (previous: FxSnapshot | null, usdMicros: number, inrMicros: number): FrozenRates => ({
+  usdMicros,
+  inrMicros: previous?.inrMicros ?? inrMicros,
+});
+
 export async function createOrder(db: D1Database, input: OrderInput): Promise<number> {
   await requireSupplier(db, input.supplierId);
+  const snapshot = await currentSnapshot(db, input.fxRateMicros);
   const result = await db
     .prepare(
       `INSERT INTO orders (supplier_id, order_date, status, currency, shipping_cents, shipping_currency,
-        customs_cents, customs_currency, fx_rate_micros, carrier, tracking_number, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        shipping_fx_rate_micros, shipping_inr_rate_micros, customs_cents, customs_currency,
+        customs_fx_rate_micros, customs_inr_rate_micros, fx_rate_micros, carrier, tracking_number, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    .bind(...orderParams(input))
+    .bind(
+      input.supplierId, input.orderDate, input.status, input.currency, input.shippingCents, input.shippingCurrency,
+      snapshot.usdMicros, snapshot.inrMicros, input.customsCents, input.customsCurrency,
+      snapshot.usdMicros, snapshot.inrMicros, input.fxRateMicros, input.carrier, input.trackingNumber, input.notes,
+    )
     .run();
   return result.meta.last_row_id;
 }
@@ -133,6 +171,9 @@ export async function createOrder(db: D1Database, input: OrderInput): Promise<nu
 /**
  * Line prices are stored in the order currency, so changing the currency converts them
  * (at the order rate, or the current setting) atomically with the order update.
+ * The frozen rates follow the same rule: an amount that changes is stamped with the rates in force
+ * now, an amount that stays keeps the rates it was entered with. When the order's fixed rate
+ * changes, the whole order is valued again with the new rate.
  */
 export async function updateOrder(db: D1Database, id: number, input: OrderInput): Promise<void> {
   const previous = await getOrder(db, id);
@@ -140,8 +181,26 @@ export async function updateOrder(db: D1Database, id: number, input: OrderInput)
   await requireSupplier(db, input.supplierId);
 
   const statements: D1PreparedStatement[] = [];
+  const market = marketRates(await getSettings(db));
+  const rateChanged = previous.fxRateMicros !== input.fxRateMicros;
+  const snapshot: FrozenRates = { usdMicros: input.fxRateMicros ?? market.usdMicros, inrMicros: market.inrMicros };
+  const shippingChanged =
+    previous.shippingCents !== input.shippingCents || previous.shippingCurrency !== input.shippingCurrency;
+  const customsChanged =
+    previous.customsCents !== input.customsCents || previous.customsCurrency !== input.customsCurrency;
+  const shippingSnapshot = shippingChanged
+    ? snapshot
+    : rateChanged
+      ? revalued(previous.shippingSnapshot, snapshot.usdMicros, snapshot.inrMicros)
+      : previous.shippingSnapshot;
+  const customsSnapshot = customsChanged
+    ? snapshot
+    : rateChanged
+      ? revalued(previous.customsSnapshot, snapshot.usdMicros, snapshot.inrMicros)
+      : previous.customsSnapshot;
+
   if (previous.currency !== input.currency) {
-    const rates = withUsdRate(marketRates(await getSettings(db)), input.fxRateMicros);
+    const rates = withUsdRate(market, input.fxRateMicros);
     const lines = await all<{ id: number; unit_price_cents: number }>(
       db,
       'SELECT id, unit_price_cents FROM order_lines WHERE order_id = ? AND unit_price_cents IS NOT NULL',
@@ -152,15 +211,36 @@ export async function updateOrder(db: D1Database, id: number, input: OrderInput)
       statements.push(db.prepare('UPDATE order_lines SET unit_price_cents = ? WHERE id = ?').bind(converted, line.id));
     }
   }
+  if (rateChanged) {
+    // The order's fixed rate changed: the amounts it holds are valued again with the new rate.
+    // Only the EUR→USD part changes; the rupee keeps the rate each amount was frozen with.
+    for (const [column, amount] of [
+      ['theoretical_fx_rate_micros', 'theoretical_cost_cents'],
+      ['sale_fx_rate_micros', 'sale_price_cents'],
+      ['handling_fx_rate_micros', 'handling_cost_cents'],
+    ] as const) {
+      statements.push(
+        db
+          .prepare(`UPDATE order_lines SET ${column} = ? WHERE order_id = ? AND ${amount} IS NOT NULL`)
+          .bind(snapshot.usdMicros, id),
+      );
+    }
+  }
   statements.push(
     db
       .prepare(
         `UPDATE orders SET supplier_id = ?, order_date = ?, status = ?, currency = ?, shipping_cents = ?,
-          shipping_currency = ?, customs_cents = ?, customs_currency = ?, fx_rate_micros = ?, carrier = ?,
-          tracking_number = ?, notes = ?, updated_at = datetime('now')
+          shipping_currency = ?, shipping_fx_rate_micros = ?, shipping_inr_rate_micros = ?, customs_cents = ?,
+          customs_currency = ?, customs_fx_rate_micros = ?, customs_inr_rate_micros = ?, fx_rate_micros = ?,
+          carrier = ?, tracking_number = ?, notes = ?, updated_at = datetime('now')
          WHERE id = ?`,
       )
-      .bind(...orderParams(input), id),
+      .bind(
+        input.supplierId, input.orderDate, input.status, input.currency, input.shippingCents, input.shippingCurrency,
+        shippingSnapshot?.usdMicros ?? null, shippingSnapshot?.inrMicros ?? null, input.customsCents, input.customsCurrency,
+        customsSnapshot?.usdMicros ?? null, customsSnapshot?.inrMicros ?? null, input.fxRateMicros,
+        input.carrier, input.trackingNumber, input.notes, id,
+      ),
   );
   await db.batch(statements);
 }
@@ -238,18 +318,38 @@ export async function deleteLine(db: D1Database, id: number): Promise<void> {
   await requireChanged(await db.prepare('DELETE FROM order_lines WHERE id = ?').bind(id).run(), 'Línea');
 }
 
-/** Adds (or replaces) lines atomically, optionally applying the order's shipping in the same batch. */
+/**
+ * Adds (or replaces) lines atomically, optionally applying the order's shipping in the same batch.
+ * The shipping keeps the rates it was frozen with unless the amount or its currency changes.
+ */
 export async function importLines(db: D1Database, orderId: number, input: ImportInput): Promise<number> {
-  await requireOrder(db, orderId);
+  const order = await getOrder(db, orderId);
+  if (!order) throw notFound('Pedido');
   const start = input.replaceExisting ? 1 : await nextPosition(db, orderId);
+  const shippingChanged =
+    input.shipping !== null &&
+    (input.shipping.cents !== order.shippingCents || input.shipping.currency !== order.shippingCurrency);
+  const snapshot = input.shipping
+    ? shippingChanged
+      ? await currentSnapshot(db, order.fxRateMicros)
+      : order.shippingSnapshot
+    : null;
   const statements = [
     ...(input.replaceExisting ? [db.prepare('DELETE FROM order_lines WHERE order_id = ?').bind(orderId)] : []),
     ...input.lines.map((line, index) => insertLineStatement(db, orderId, start + index, line)),
     ...(input.shipping
       ? [
           db
-            .prepare("UPDATE orders SET shipping_cents = ?, shipping_currency = ?, updated_at = datetime('now') WHERE id = ?")
-            .bind(input.shipping.cents, input.shipping.currency, orderId),
+            .prepare(
+              "UPDATE orders SET shipping_cents = ?, shipping_currency = ?, shipping_fx_rate_micros = ?, shipping_inr_rate_micros = ?, updated_at = datetime('now') WHERE id = ?",
+            )
+            .bind(
+              input.shipping.cents,
+              input.shipping.currency,
+              snapshot?.usdMicros ?? null,
+              snapshot?.inrMicros ?? null,
+              orderId,
+            ),
         ]
       : []),
   ];
@@ -300,6 +400,11 @@ interface ProductRow {
   fx_rate_micros: number | null; sale_price_cents: number | null; sale_currency: Currency | null; margin_bp: number | null;
   theoretical_cost_cents: number | null; theoretical_currency: Currency | null;
   handling_cost_cents: number | null; handling_currency: Currency | null;
+  shipping_fx_rate_micros: number | null; shipping_inr_rate_micros: number | null;
+  customs_fx_rate_micros: number | null; customs_inr_rate_micros: number | null;
+  theoretical_fx_rate_micros: number | null; theoretical_inr_rate_micros: number | null;
+  sale_fx_rate_micros: number | null; sale_inr_rate_micros: number | null;
+  handling_fx_rate_micros: number | null; handling_inr_rate_micros: number | null;
 }
 
 /** Every line of every non-cancelled order, newest first, with what is needed for landed cost. */
@@ -309,7 +414,10 @@ export async function listProducts(db: D1Database) {
     `SELECT l.id AS line_id, o.id AS order_id, o.order_date, s.name AS supplier_name, l.quantity, l.piece_type,
             l.measurements, l.unit_price_cents, o.currency, o.shipping_cents, o.shipping_currency, o.customs_cents,
             o.customs_currency, o.fx_rate_micros, l.sale_price_cents, l.sale_currency, l.margin_bp,
-            l.theoretical_cost_cents, l.theoretical_currency, l.handling_cost_cents, l.handling_currency
+            l.theoretical_cost_cents, l.theoretical_currency, l.handling_cost_cents, l.handling_currency,
+            o.shipping_fx_rate_micros, o.shipping_inr_rate_micros, o.customs_fx_rate_micros, o.customs_inr_rate_micros,
+            l.theoretical_fx_rate_micros, l.theoretical_inr_rate_micros, l.sale_fx_rate_micros, l.sale_inr_rate_micros,
+            l.handling_fx_rate_micros, l.handling_inr_rate_micros
      FROM order_lines l
      JOIN orders o ON o.id = l.order_id
      LEFT JOIN suppliers s ON s.id = o.supplier_id
@@ -324,18 +432,71 @@ export async function listProducts(db: D1Database) {
     salePriceCents: r.sale_price_cents, saleCurrency: r.sale_currency, marginBp: r.margin_bp,
     theoreticalCostCents: r.theoretical_cost_cents, theoreticalCurrency: r.theoretical_currency,
     handlingCostCents: r.handling_cost_cents, handlingCurrency: r.handling_currency,
+    shippingSnapshot: frozenRates(r.shipping_fx_rate_micros, r.shipping_inr_rate_micros),
+    customsSnapshot: frozenRates(r.customs_fx_rate_micros, r.customs_inr_rate_micros),
+    theoreticalSnapshot: frozenRates(r.theoretical_fx_rate_micros, r.theoretical_inr_rate_micros),
+    saleSnapshot: frozenRates(r.sale_fx_rate_micros, r.sale_inr_rate_micros),
+    handlingSnapshot: frozenRates(r.handling_fx_rate_micros, r.handling_inr_rate_micros),
   }));
 }
 
+interface PricingRow {
+  order_id: number; sale_price_cents: number | null; sale_currency: Currency | null; margin_bp: number | null;
+  theoretical_cost_cents: number | null; theoretical_currency: Currency | null;
+  handling_cost_cents: number | null; handling_currency: Currency | null;
+  sale_fx_rate_micros: number | null; sale_inr_rate_micros: number | null;
+  theoretical_fx_rate_micros: number | null; theoretical_inr_rate_micros: number | null;
+  handling_fx_rate_micros: number | null; handling_inr_rate_micros: number | null;
+}
+
+/**
+ * Saves the sale price, the theoretical value and the handling cost of a line. Each amount that
+ * changes is stamped with the rates in force now; the ones that stay keep the rates they were
+ * entered with, so editing the sale price never moves the value of the handling cost.
+ */
 export async function updateLinePricing(db: D1Database, id: number, input: LinePricingInput): Promise<void> {
+  const current = await first<PricingRow>(
+    db,
+    `SELECT order_id, sale_price_cents, sale_currency, margin_bp, theoretical_cost_cents, theoretical_currency,
+            handling_cost_cents, handling_currency, sale_fx_rate_micros, sale_inr_rate_micros,
+            theoretical_fx_rate_micros, theoretical_inr_rate_micros, handling_fx_rate_micros, handling_inr_rate_micros
+     FROM order_lines WHERE id = ?`,
+    id,
+  );
+  if (!current) throw notFound('Línea');
+  const order = await getOrder(db, current.order_id);
+  if (!order) throw notFound('Pedido');
+  const snapshot = await currentSnapshot(db, order.fxRateMicros);
+
+  const saleSnapshot =
+    current.sale_price_cents !== input.salePriceCents || current.sale_currency !== input.saleCurrency
+      ? snapshot
+      : frozenRates(current.sale_fx_rate_micros, current.sale_inr_rate_micros);
+  const theoreticalSnapshot =
+    current.theoretical_cost_cents !== input.theoreticalCostCents || current.theoretical_currency !== input.theoreticalCurrency
+      ? snapshot
+      : frozenRates(current.theoretical_fx_rate_micros, current.theoretical_inr_rate_micros);
+  const handlingSnapshot =
+    current.handling_cost_cents !== input.handlingCostCents || current.handling_currency !== input.handlingCurrency
+      ? snapshot
+      : frozenRates(current.handling_fx_rate_micros, current.handling_inr_rate_micros);
+
   const result = await db
     .prepare(
       `UPDATE order_lines SET sale_price_cents = ?, sale_currency = ?, margin_bp = ?,
-         theoretical_cost_cents = ?, theoretical_currency = ?, handling_cost_cents = ?, handling_currency = ? WHERE id = ?`,
+         sale_fx_rate_micros = ?, sale_inr_rate_micros = ?,
+         theoretical_cost_cents = ?, theoretical_currency = ?, theoretical_fx_rate_micros = ?, theoretical_inr_rate_micros = ?,
+         handling_cost_cents = ?, handling_currency = ?, handling_fx_rate_micros = ?, handling_inr_rate_micros = ?
+       WHERE id = ?`,
     )
     .bind(
-      input.salePriceCents, input.saleCurrency, input.marginBp, input.theoreticalCostCents, input.theoreticalCurrency,
-      input.handlingCostCents, input.handlingCurrency, id,
+      input.salePriceCents, input.saleCurrency, input.marginBp,
+      saleSnapshot?.usdMicros ?? null, saleSnapshot?.inrMicros ?? null,
+      input.theoreticalCostCents, input.theoreticalCurrency,
+      theoreticalSnapshot?.usdMicros ?? null, theoreticalSnapshot?.inrMicros ?? null,
+      input.handlingCostCents, input.handlingCurrency,
+      handlingSnapshot?.usdMicros ?? null, handlingSnapshot?.inrMicros ?? null,
+      id,
     )
     .run();
   await requireChanged(result, 'Línea');
@@ -348,11 +509,16 @@ export async function listPayments(db: D1Database, orderId: number): Promise<Pay
 }
 
 export async function listAllPaymentsForList(db: D1Database) {
-  const rows = await all<Pick<PaymentRow, 'order_id' | 'amount_cents' | 'currency' | 'fx_rate_micros'>>(
+  const rows = await all<Pick<PaymentRow, 'order_id' | 'amount_cents' | 'currency' | 'fx_rate_micros' | 'inr_rate_micros'>>(
     db,
-    'SELECT order_id, amount_cents, currency, fx_rate_micros FROM payments',
+    'SELECT order_id, amount_cents, currency, fx_rate_micros, inr_rate_micros FROM payments',
   );
-  return rows.map((r) => ({ orderId: r.order_id, amountCents: r.amount_cents, currency: r.currency, fxRateMicros: r.fx_rate_micros }));
+  return rows.map((r) => ({
+    orderId: r.order_id,
+    amountCents: r.amount_cents,
+    currency: r.currency,
+    snapshot: frozenRates(r.fx_rate_micros, r.inr_rate_micros),
+  }));
 }
 
 export async function getPayment(db: D1Database, id: number): Promise<Payment | null> {
@@ -360,22 +526,55 @@ export async function getPayment(db: D1Database, id: number): Promise<Payment | 
   return row ? toPayment(row) : null;
 }
 
+/**
+ * A payment keeps the rates it was entered with: the rate the user fixed for it, the order's fixed
+ * rate, or the market rate of that moment. The rupee rate is always the market one of that moment.
+ */
 export async function createPayment(db: D1Database, orderId: number, input: PaymentInput): Promise<number> {
-  await requireOrder(db, orderId);
+  const order = await getOrder(db, orderId);
+  if (!order) throw notFound('Pedido');
+  const settings = await getSettings(db);
+  const usdMicros = input.fxRateMicros ?? order.fxRateMicros ?? settings.fxRateMicros;
   const result = await db
     .prepare(
-      `INSERT INTO payments (order_id, amount_cents, currency, paid_on, method, fx_rate_micros, note)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO payments (order_id, amount_cents, currency, paid_on, method, fx_rate_micros, inr_rate_micros, note)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    .bind(orderId, input.amountCents, input.currency, input.paidOn, input.method, input.fxRateMicros, input.note)
+    .bind(orderId, input.amountCents, input.currency, input.paidOn, input.method, usdMicros, settings.inrRateMicros, input.note)
     .run();
   return result.meta.last_row_id;
 }
 
+/**
+ * Updates a payment. A rate typed by the user is the one that gets frozen; without one, the rates
+ * the payment already had are kept, unless the amount changed (then they are stamped again).
+ */
 export async function updatePayment(db: D1Database, id: number, input: PaymentInput): Promise<void> {
+  const current = await first<PaymentRow>(db, `SELECT ${PAYMENT_COLUMNS} FROM payments WHERE id = ?`, id);
+  if (!current) throw notFound('Pago');
+  const previous = toPayment(current);
+  const order = await getOrder(db, current.order_id);
+  if (!order) throw notFound('Pedido');
+  const settings = await getSettings(db);
+
+  let usdMicros: number;
+  let inrMicros: number;
+  if (input.fxRateMicros !== null) {
+    usdMicros = input.fxRateMicros;
+    inrMicros = previous.snapshot?.inrMicros ?? settings.inrRateMicros;
+  } else if (previous.amountCents !== input.amountCents || previous.currency !== input.currency) {
+    usdMicros = order.fxRateMicros ?? settings.fxRateMicros;
+    inrMicros = settings.inrRateMicros;
+  } else {
+    usdMicros = previous.snapshot?.usdMicros ?? order.fxRateMicros ?? settings.fxRateMicros;
+    inrMicros = previous.snapshot?.inrMicros ?? settings.inrRateMicros;
+  }
+
   const result = await db
-    .prepare('UPDATE payments SET amount_cents = ?, currency = ?, paid_on = ?, method = ?, fx_rate_micros = ?, note = ? WHERE id = ?')
-    .bind(input.amountCents, input.currency, input.paidOn, input.method, input.fxRateMicros, input.note, id)
+    .prepare(
+      'UPDATE payments SET amount_cents = ?, currency = ?, paid_on = ?, method = ?, fx_rate_micros = ?, inr_rate_micros = ?, note = ? WHERE id = ?',
+    )
+    .bind(input.amountCents, input.currency, input.paidOn, input.method, usdMicros, inrMicros, input.note, id)
     .run();
   await requireChanged(result, 'Pago');
 }

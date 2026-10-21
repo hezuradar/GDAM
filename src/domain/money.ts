@@ -1,4 +1,4 @@
-import type { Currency } from './types';
+import type { Currency, FxSnapshot } from './types';
 
 const MICROS = 1_000_000;
 const CURRENCY_SUFFIX: Record<Currency, string> = { EUR: '€', USD: 'US$', INR: '₹' };
@@ -23,6 +23,19 @@ export function marketRates(settings: { readonly fxRateMicros: number; readonly 
 /** An order or payment may freeze its own EUR→USD rate; the rupee always uses the market rate. */
 export function withUsdRate(rates: FxRates, usdMicros: number | null): FxRates {
   return usdMicros === null ? rates : { ...rates, usdMicros };
+}
+
+/**
+ * The rates to convert an amount that keeps its own currency:
+ * - `pinnedUsdMicros`: a rate the user fixed for this order; it always wins.
+ * - `snapshot`: the rates frozen when the amount was entered; they win over the market.
+ * - `market`: the fallback for amounts saved before the rates were frozen.
+ */
+export function amountRates(market: FxRates, snapshot: FxSnapshot | null, pinnedUsdMicros: number | null): FxRates {
+  return {
+    usdMicros: pinnedUsdMicros ?? snapshot?.usdMicros ?? market.usdMicros,
+    inrMicros: snapshot?.inrMicros ?? market.inrMicros,
+  };
 }
 
 function unitsPerEuro(currency: Currency, rates: FxRates): number {
