@@ -1,4 +1,4 @@
-import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { announce, announceErrors, confirmDestructive, showError } from '@/components/ui/alerts';
@@ -39,8 +39,12 @@ export default function PaymentFormScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
 
-  useEffect(() => {
-    // Reset first: the same screen instance can move to another payment or order.
+  // Reset while rendering, before the load: the same screen instance can move to another
+  // payment or order, and a retry must not keep what the failed attempt left.
+  const loadKey = `${orderId}:${id}:${loadAttempt}`;
+  const [formKey, setFormKey] = useState(loadKey);
+  if (formKey !== loadKey) {
+    setFormKey(loadKey);
     setLoadError(null);
     setAmount('');
     setCurrency(null);
@@ -49,6 +53,9 @@ export default function PaymentFormScreen() {
     setPaidOn(todayIso());
     setMethod('transferencia');
     setNote('');
+  }
+
+  useEffect(() => {
     if (id === null) return;
     getPayment(id)
       .then((p) => {

@@ -26,10 +26,13 @@ export default function SupplierFormScreen() {
   // existing supplier with the defaults. Show the error and offer a retry instead.
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
+  const retryLoad = () => {
+    setLoadError(null);
+    setLoadAttempt((n) => n + 1);
+  };
 
   useEffect(() => {
     if (id === null) return;
-    setLoadError(null);
     getSupplier(id)
       .then((s) => {
         if (!s) {
@@ -46,7 +49,7 @@ export default function SupplierFormScreen() {
   }, [id, loadAttempt]);
 
   if (loadError) {
-    return <ErrorView message={loadError} onRetry={() => setLoadAttempt((n) => n + 1)} />;
+    return <ErrorView message={loadError} onRetry={retryLoad} />;
   }
 
   const handleSave = async () => {

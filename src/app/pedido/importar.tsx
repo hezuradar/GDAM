@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Clipboard from 'expo-clipboard';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { memo, useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { announce, confirmDestructive, showError } from '@/components/ui/alerts';
@@ -8,9 +8,8 @@ import { Button } from '@/components/ui/Button';
 import { Card, EmptyState, FormScroll, LoadingView, SectionHeader } from '@/components/ui/Layout';
 import { TextField } from '@/components/ui/TextField';
 import { importLines } from '@/api/data';
-import { formatQuantity } from '@/domain/exportText';
+import { formatQuantity, plural } from '@/domain/exportText';
 import { formatMoney } from '@/domain/money';
-import { plural } from '@/domain/exportText';
 import type { Currency } from '@/domain/types';
 import { canImport, ISSUE_NO_QUANTITY, parseWhatsAppMessage, toImportableLine, type ParsedLine } from '@/domain/whatsappParser';
 import { useOrderDetail } from '@/hooks/useOrderDetail';

@@ -1,12 +1,11 @@
-import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { announce, announceErrors, confirmDestructive, showError } from '@/components/ui/alerts';
 import { Button } from '@/components/ui/Button';
 import { EmptyState, ErrorView, FormScroll } from '@/components/ui/Layout';
 import { TextField } from '@/components/ui/TextField';
-import { deleteLine, getLine, saveLine } from '@/api/data';
-import { getOrder } from '@/api/data';
+import { deleteLine, getLine, getOrder, saveLine } from '@/api/data';
 import { formatQuantity } from '@/domain/exportText';
 import { centsToInput, currencySymbol, parseAmount, parseDecimal } from '@/domain/money';
 import type { Currency } from '@/domain/types';
@@ -32,10 +31,13 @@ export default function LineFormScreen() {
   // existing line with the defaults. Show the error and offer a retry instead.
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
+  const retryLoad = () => {
+    setLoadError(null);
+    setLoadAttempt((n) => n + 1);
+  };
 
   useEffect(() => {
     if (orderId === null) return;
-    setLoadError(null);
     const load = async () => {
       const [order, line] = await Promise.all([getOrder(orderId), id ? getLine(id) : null]);
       if (!order || (id !== null && !line)) {
@@ -60,7 +62,7 @@ export default function LineFormScreen() {
   }
 
   if (loadError) {
-    return <ErrorView message={loadError} onRetry={() => setLoadAttempt((n) => n + 1)} />;
+    return <ErrorView message={loadError} onRetry={retryLoad} />;
   }
 
   const handleSave = async () => {

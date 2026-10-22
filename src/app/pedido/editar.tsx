@@ -7,9 +7,7 @@ import { ChipGroup } from '@/components/ui/ChipGroup';
 import { DateField } from '@/components/ui/DateField';
 import { Card, EmptyState, ErrorView, FormScroll, SectionHeader } from '@/components/ui/Layout';
 import { TextField } from '@/components/ui/TextField';
-import { getOrder, saveOrder } from '@/api/data';
-import { getSettings } from '@/api/data';
-import { listSuppliers } from '@/api/data';
+import { getOrder, getSettings, listSuppliers, saveOrder } from '@/api/data';
 import { todayIso, isValidIsoDate } from '@/domain/dates';
 import { centsToInput, convertInput, currencySymbol, formatRate, marketRates, parseAmount, parseRate, withUsdRate, type FxRates } from '@/domain/money';
 import { CURRENCIES, ORDER_STATUSES, type Currency, type OrderStatus, type Supplier } from '@/domain/types';
@@ -80,6 +78,10 @@ export default function OrderFormScreen() {
   // existing order with the defaults. Show the error and offer a retry instead.
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
+  const retryLoad = () => {
+    setLoadError(null);
+    setLoadAttempt((n) => n + 1);
+  };
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm((f) => ({ ...f, [key]: value }));
   /** Switching the currency of shipping or customs converts the typed amount (order rate if set, else market). */
   const changeAmountCurrency = (amountKey: 'shipping' | 'customs', currencyKey: 'shippingCurrency' | 'customsCurrency', next: Currency) =>
@@ -126,7 +128,6 @@ export default function OrderFormScreen() {
         setForm((f) => ({ ...f, currency: c, shippingCurrency: c, supplierId: f.supplierId ?? (list.length === 1 ? list[0].id : null) }));
       }
     };
-    setLoadError(null);
     load().catch((e: unknown) => setLoadError(e instanceof Error ? e.message : 'No se pudo cargar el pedido'));
   }, [id, loadAttempt]);
 
@@ -164,7 +165,7 @@ export default function OrderFormScreen() {
   };
 
   if (loadError) {
-    return <ErrorView message={loadError} onRetry={() => setLoadAttempt((n) => n + 1)} />;
+    return <ErrorView message={loadError} onRetry={retryLoad} />;
   }
 
   if (suppliers && suppliers.length === 0) {

@@ -10,27 +10,38 @@ import { LoadingView } from './ui/Layout';
 import { TextField } from './ui/TextField';
 
 type GateState = 'checking' | 'login' | 'ready' | 'notConfigured' | 'offline';
+type GateResult = { readonly state: Exclude<GateState, 'checking'>; readonly message: string | null };
+
+/** Asks the server which screen the gate has to show. */
+async function resolveGate(): Promise<GateResult> {
+  try {
+    const session = await getSession();
+    return { state: !session.configured ? 'notConfigured' : session.authenticated ? 'ready' : 'login', message: null };
+  } catch (e: unknown) {
+    return { state: 'offline', message: errorMessage(e) };
+  }
+}
 
 /** Shows the app only with a valid session; otherwise a password screen. */
 export function AuthGate({ children }: { children: ReactNode }) {
   const [state, setState] = useState<GateState>('checking');
   const [message, setMessage] = useState<string | null>(null);
 
-  const check = useCallback(async () => {
-    setState('checking');
-    try {
-      const session = await getSession();
-      setState(!session.configured ? 'notConfigured' : session.authenticated ? 'ready' : 'login');
-    } catch (e: unknown) {
-      setMessage(errorMessage(e));
-      setState('offline');
-    }
+  const applyGate = useCallback((result: GateResult) => {
+    setMessage(result.message);
+    setState(result.state);
   }, []);
 
+  const check = useCallback(() => {
+    setState('checking');
+    void resolveGate().then(applyGate);
+  }, [applyGate]);
+
   useEffect(() => {
-    void check();
+    // The initial state is already 'checking': only the answer has to be awaited.
+    void resolveGate().then(applyGate);
     return onUnauthorized(() => setState('login'));
-  }, [check]);
+  }, [applyGate]);
 
   if (state === 'ready') return <>{children}</>;
   if (state === 'checking') return <LoadingView />;

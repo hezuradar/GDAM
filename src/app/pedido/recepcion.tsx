@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams } from 'expo-router';
-import { memo, useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { saveReception } from '@/api/data';
 import { announce, confirmDestructive, showError } from '@/components/ui/alerts';
@@ -81,11 +81,11 @@ export default function ReceptionScreen() {
   const lines = data?.lines ?? EMPTY_LINES;
 
   // Seed once from what was saved before (later focus reloads must not discard the checklist).
-  useEffect(() => {
-    if (!data || isSeeded) return;
+  // Done while rendering, so the first frame with data already shows the saved quantities.
+  if (data && !isSeeded) {
     setSeeded(true);
     setReceived(new Map(data.lines.map((l) => [l.id, l.receivedQuantity === null ? '' : quantityToInput(l.receivedQuantity)])));
-  }, [data, isSeeded]);
+  }
 
   // Stable callbacks: the memoized rows only re-render when their own value changes.
   const setText = useCallback((lineId: number, text: string) => setReceived((prev) => new Map(prev).set(lineId, text)), []);
