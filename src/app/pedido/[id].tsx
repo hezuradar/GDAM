@@ -10,6 +10,7 @@ import { Button, ButtonRow, IconButton } from '@/components/ui/Button';
 import { ChipGroup } from '@/components/ui/ChipGroup';
 import { Card, EmptyState, ErrorView, FormScroll, InfoRow, LoadingView, PressableRow, SectionHeader } from '@/components/ui/Layout';
 import { deleteOrder, updateOrderStatus } from '@/api/data';
+import { orderDuration, type OrderDuration } from '@/domain/dates';
 import { formatDate, formatQuantity, orderSummaryText, plural } from '@/domain/exportText';
 import { receptionSummary } from '@/domain/reception';
 import { ORDER_STATUSES, type OrderStatus } from '@/domain/types';
@@ -33,6 +34,11 @@ function summaryFor(detail: OrderDetail): string {
   });
 }
 
+function durationRow(duration: OrderDuration): { label: string; value: string } {
+  const days = plural(duration.days, 'día', 'días');
+  return duration.kind === 'completed' ? { label: 'Tardó en llegar', value: days } : { label: 'Días abierto', value: days };
+}
+
 export default function OrderDetailScreen() {
   const id = parseIdParam(useLocalSearchParams<{ id: string }>().id) ?? 0;
   const styles = useThemedStyles(makeStyles);
@@ -51,6 +57,7 @@ export default function OrderDetailScreen() {
     router.push({ pathname, params: { orderId: order.id, ...extra } });
 
   const reception = receptionSummary(lines);
+  const duration = orderDuration(order);
   const changeStatus = (status: OrderStatus) =>
     // Receiving goes through the checklist so missing pieces are recorded.
     status === 'recibido' && lines.length > 0
@@ -110,6 +117,8 @@ export default function OrderDetailScreen() {
           </PressableRow>
         ) : null}
         <InfoRow label="Fecha" value={formatDate(order.orderDate)} />
+        {order.receivedDate && order.status === 'recibido' ? <InfoRow label="Recibido" value={formatDate(order.receivedDate)} /> : null}
+        {duration ? <InfoRow {...durationRow(duration)} /> : null}
         <InfoRow label="Moneda del pedido" value={order.currency} />
         <StatusStepper status={order.status} />
         <ChipGroup<OrderStatus>

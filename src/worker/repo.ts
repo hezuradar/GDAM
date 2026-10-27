@@ -24,7 +24,7 @@ interface OrderRow {
   shipping_cents: number; shipping_currency: Currency; customs_cents: number; customs_currency: Currency;
   fx_rate_micros: number | null; carrier: string; tracking_number: string; notes: string;
   shipping_fx_rate_micros: number | null; shipping_inr_rate_micros: number | null;
-  customs_fx_rate_micros: number | null; customs_inr_rate_micros: number | null;
+  customs_fx_rate_micros: number | null; customs_inr_rate_micros: number | null; received_date: string | null;
 }
 interface LineRow {
   id: number; order_id: number; position: number; quantity: number; piece_type: string;
@@ -44,7 +44,7 @@ const toOrder = (r: OrderRow): Order => ({
   id: r.id, supplierId: r.supplier_id, orderDate: r.order_date, status: r.status, currency: r.currency,
   shippingCents: r.shipping_cents, shippingCurrency: r.shipping_currency, customsCents: r.customs_cents,
   customsCurrency: r.customs_currency, fxRateMicros: r.fx_rate_micros, carrier: r.carrier,
-  trackingNumber: r.tracking_number, notes: r.notes,
+  trackingNumber: r.tracking_number, notes: r.notes, receivedDate: r.received_date,
   shippingSnapshot: frozenRates(r.shipping_fx_rate_micros, r.shipping_inr_rate_micros),
   customsSnapshot: frozenRates(r.customs_fx_rate_micros, r.customs_inr_rate_micros),
 });
@@ -60,7 +60,7 @@ const toPayment = (r: PaymentRow): Payment => ({
 const SUPPLIER_COLUMNS = 'id, name, whatsapp, notes';
 const ORDER_COLUMNS = `id, supplier_id, order_date, status, currency, shipping_cents, shipping_currency,
   customs_cents, customs_currency, fx_rate_micros, carrier, tracking_number, notes,
-  shipping_fx_rate_micros, shipping_inr_rate_micros, customs_fx_rate_micros, customs_inr_rate_micros`;
+  shipping_fx_rate_micros, shipping_inr_rate_micros, customs_fx_rate_micros, customs_inr_rate_micros, received_date`;
 const LINE_COLUMNS = 'id, order_id, position, quantity, piece_type, measurements, unit_price_cents, raw_text, received_quantity';
 const PAYMENT_COLUMNS = 'id, order_id, amount_cents, currency, paid_on, method, fx_rate_micros, note, inr_rate_micros';
 
@@ -149,6 +149,9 @@ const revalued = (previous: FxSnapshot | null, usdMicros: number, inrMicros: num
   inrMicros: previous?.inrMicros ?? inrMicros,
 });
 
+/** Received orders keep the day they first arrived; any other status clears it. Binds the status once. */
+const RECEIVED_DATE_SQL = "received_date = CASE WHEN ? = 'recibido' THEN COALESCE(received_date, date('now')) ELSE NULL END";
+
 export async function createOrder(db: D1Database, input: OrderInput): Promise<number> {
   await requireSupplier(db, input.supplierId);
   const snapshot = await currentSnapshot(db, input.fxRateMicros);
@@ -156,13 +159,14 @@ export async function createOrder(db: D1Database, input: OrderInput): Promise<nu
     .prepare(
       `INSERT INTO orders (supplier_id, order_date, status, currency, shipping_cents, shipping_currency,
         shipping_fx_rate_micros, shipping_inr_rate_micros, customs_cents, customs_currency,
-        customs_fx_rate_micros, customs_inr_rate_micros, fx_rate_micros, carrier, tracking_number, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        customs_fx_rate_micros, customs_inr_rate_micros, fx_rate_micros, carrier, tracking_number, notes, received_date)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'recibido' THEN date('now') END)`,
     )
     .bind(
       input.supplierId, input.orderDate, input.status, input.currency, input.shippingCents, input.shippingCurrency,
       snapshot.usdMicros, snapshot.inrMicros, input.customsCents, input.customsCurrency,
       snapshot.usdMicros, snapshot.inrMicros, input.fxRateMicros, input.carrier, input.trackingNumber, input.notes,
+      input.status,
     )
     .run();
   return result.meta.last_row_id;
@@ -232,14 +236,14 @@ export async function updateOrder(db: D1Database, id: number, input: OrderInput)
         `UPDATE orders SET supplier_id = ?, order_date = ?, status = ?, currency = ?, shipping_cents = ?,
           shipping_currency = ?, shipping_fx_rate_micros = ?, shipping_inr_rate_micros = ?, customs_cents = ?,
           customs_currency = ?, customs_fx_rate_micros = ?, customs_inr_rate_micros = ?, fx_rate_micros = ?,
-          carrier = ?, tracking_number = ?, notes = ?, updated_at = datetime('now')
+          carrier = ?, tracking_number = ?, notes = ?, ${RECEIVED_DATE_SQL}, updated_at = datetime('now')
          WHERE id = ?`,
       )
       .bind(
         input.supplierId, input.orderDate, input.status, input.currency, input.shippingCents, input.shippingCurrency,
         shippingSnapshot?.usdMicros ?? null, shippingSnapshot?.inrMicros ?? null, input.customsCents, input.customsCurrency,
         customsSnapshot?.usdMicros ?? null, customsSnapshot?.inrMicros ?? null, input.fxRateMicros,
-        input.carrier, input.trackingNumber, input.notes, id,
+        input.carrier, input.trackingNumber, input.notes, input.status, id,
       ),
   );
   await db.batch(statements);
@@ -247,8 +251,8 @@ export async function updateOrder(db: D1Database, id: number, input: OrderInput)
 
 export async function updateOrderStatus(db: D1Database, id: number, status: OrderStatus): Promise<void> {
   const result = await db
-    .prepare("UPDATE orders SET status = ?, updated_at = datetime('now') WHERE id = ?")
-    .bind(status, id)
+    .prepare(`UPDATE orders SET status = ?, ${RECEIVED_DATE_SQL}, updated_at = datetime('now') WHERE id = ?`)
+    .bind(status, status, id)
     .run();
   await requireChanged(result, 'Pedido');
 }
@@ -372,7 +376,7 @@ export async function saveReception(db: D1Database, orderId: number, input: Rece
     db.prepare('UPDATE order_lines SET received_quantity = ? WHERE id = ? AND order_id = ?').bind(l.receivedQuantity, l.lineId, orderId),
   );
   if (input.markReceived) {
-    statements.push(db.prepare("UPDATE orders SET status = 'recibido', updated_at = datetime('now') WHERE id = ?").bind(orderId));
+    statements.push(db.prepare(`UPDATE orders SET status = 'recibido', ${RECEIVED_DATE_SQL}, updated_at = datetime('now') WHERE id = ?`).bind('recibido', orderId));
   }
   await db.batch(statements);
 }

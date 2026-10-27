@@ -48,6 +48,8 @@ export interface Order {
   readonly carrier: string;
   readonly trackingNumber: string;
   readonly notes: string;
+  /** Day the order was marked as received (YYYY-MM-DD); null while it has not arrived. */
+  readonly receivedDate: string | null;
 }
 
 export interface OrderLine {

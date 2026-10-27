@@ -19,3 +19,35 @@ export function isoToDate(iso: string): Date {
   const [year, month, day] = iso.split('-').map(Number);
   return isValidIsoDate(iso) ? new Date(year, month - 1, day) : new Date();
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Whole calendar days from one YYYY-MM-DD date to another (negative if `to` is earlier). */
+export function daysBetween(fromIso: string, toIso: string): number {
+  // UTC avoids the 23/25-hour days around daylight-saving changes.
+  const utc = (iso: string) => {
+    const [year, month, day] = iso.split('-').map(Number);
+    return Date.UTC(year, month - 1, day);
+  };
+  return Math.round((utc(toIso) - utc(fromIso)) / DAY_MS);
+}
+
+export type OrderDuration =
+  | { readonly kind: 'completed'; readonly days: number }
+  | { readonly kind: 'open'; readonly days: number };
+
+/**
+ * How long a received order took to arrive, or how long an open one has been waiting.
+ * Cancelled orders, and received ones without a reception date, have no duration.
+ */
+export function orderDuration(
+  order: { readonly orderDate: string; readonly status: string; readonly receivedDate: string | null },
+  today: string = todayIso(),
+): OrderDuration | null {
+  if (!isValidIsoDate(order.orderDate) || order.status === 'cancelado') return null;
+  if (order.status === 'recibido') {
+    if (!order.receivedDate || !isValidIsoDate(order.receivedDate)) return null;
+    return { kind: 'completed', days: Math.max(0, daysBetween(order.orderDate, order.receivedDate)) };
+  }
+  return { kind: 'open', days: Math.max(0, daysBetween(order.orderDate, today)) };
+}

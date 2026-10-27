@@ -18,6 +18,7 @@ const order = (overrides: Partial<Order>): Order => ({
   carrier: 'DHL',
   trackingNumber: 'JD1',
   notes: 'urgente',
+  receivedDate: null,
   ...overrides,
 });
 
