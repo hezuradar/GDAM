@@ -60,6 +60,11 @@ export interface ProductCost extends ProductSource {
   readonly landedUnitCents: number | null;
   /** true when the cost comes from the theoretical value instead of the order price. */
   readonly usesTheoreticalCost: boolean;
+  /**
+   * true for a zero-price replacement without theoretical value that takes its share of shipping
+   * and customs weighted by its sale price (its cost is that share alone, plus handling).
+   */
+  readonly sharesBySalePrice: boolean;
 }
 
 interface CostBase {
@@ -69,7 +74,20 @@ interface CostBase {
   readonly handlingRates: FxRates;
   /** Real unit price, or the theoretical value (order currency) for zero-price / unpriced lines. */
   readonly baseUnitCents: number | null;
+  /** Unit value used to share shipping and customs (order currency); 0 = no share. */
+  readonly weightUnitCents: number;
   readonly usesTheoreticalCost: boolean;
+  readonly sharesBySalePrice: boolean;
+}
+
+/**
+ * A zero-price replacement without theoretical value costs nothing, but it still travels: its sale
+ * price (order currency) weighs its share of shipping and customs. A margin alone cannot weigh it,
+ * because the sale price it gives depends on that very share.
+ */
+function replacementSaleWeight(r: ProductSource, saleRates: FxRates): number {
+  if (r.unitPriceCents !== 0 || r.salePriceCents === null || r.salePriceCents <= 0) return 0;
+  return convert(r.salePriceCents, r.saleCurrency ?? r.currency, r.currency, saleRates);
 }
 
 function costBase(r: ProductSource, marketRates: FxRates): CostBase {
@@ -80,31 +98,36 @@ function costBase(r: ProductSource, marketRates: FxRates): CostBase {
     !hasRealPrice && r.theoreticalCostCents !== null
       ? convert(r.theoreticalCostCents, r.theoreticalCurrency ?? r.currency, r.currency, theoreticalRates)
       : null;
+  const saleRates = amountRates(marketRates, r.saleSnapshot, r.fxRateMicros);
+  const baseUnitCents = hasRealPrice ? r.unitPriceCents : (theoretical ?? r.unitPriceCents);
+  const saleWeight = theoretical === null ? replacementSaleWeight(r, saleRates) : 0;
   return {
     rates,
-    saleRates: amountRates(marketRates, r.saleSnapshot, r.fxRateMicros),
+    saleRates,
     theoreticalRates,
     handlingRates: amountRates(marketRates, r.handlingSnapshot, r.fxRateMicros),
-    baseUnitCents: hasRealPrice ? r.unitPriceCents : (theoretical ?? r.unitPriceCents),
+    baseUnitCents,
+    weightUnitCents: saleWeight > 0 ? saleWeight : (baseUnitCents ?? 0),
     usesTheoreticalCost: theoretical !== null,
+    sharesBySalePrice: saleWeight > 0,
   };
 }
 
 /**
  * Landed cost per unit: each order's shipping + customs (converted to the order currency) is split
  * among its lines in proportion to their value, then divided by quantity. A zero-price replacement
- * counts with its theoretical value, so it carries its share too (none until it has one). Computed
- * on every read, so shipping added later is spread at once.
+ * counts with its theoretical value or, without one, with its sale price (its cost stays 0 plus that
+ * share); with neither it gets no share. Computed on every read, so shipping added later is spread at once.
  */
 export function computeProductCosts(rows: readonly ProductSource[], marketRates: FxRates): ProductCost[] {
   const bases = rows.map((r) => costBase(r, marketRates));
   const valueByOrder = new Map<number, number>();
   rows.forEach((r, i) => {
-    const base = bases[i].baseUnitCents;
-    if (base !== null) valueByOrder.set(r.orderId, (valueByOrder.get(r.orderId) ?? 0) + r.quantity * base);
+    const { baseUnitCents, weightUnitCents } = bases[i];
+    if (baseUnitCents !== null) valueByOrder.set(r.orderId, (valueByOrder.get(r.orderId) ?? 0) + r.quantity * weightUnitCents);
   });
   return rows.map((r, i) => {
-    const { rates, saleRates, theoreticalRates, handlingRates, baseUnitCents, usesTheoreticalCost } = bases[i];
+    const { rates, saleRates, theoreticalRates, handlingRates, baseUnitCents, weightUnitCents, usesTheoreticalCost, sharesBySalePrice } = bases[i];
     // Handling never takes part in the shipping split: it is a cost of this product only.
     const handlingPerUnitCents =
       r.handlingCostCents === null ? 0 : convert(r.handlingCostCents, r.handlingCurrency ?? r.currency, r.currency, handlingRates);
@@ -119,6 +142,7 @@ export function computeProductCosts(rows: readonly ProductSource[], marketRates:
         handlingPerUnitCents,
         landedUnitCents: null,
         usesTheoreticalCost: false,
+        sharesBySalePrice: false,
       };
     }
     const shippingRates = amountRates(marketRates, r.shippingSnapshot, r.fxRateMicros);
@@ -129,7 +153,7 @@ export function computeProductCosts(rows: readonly ProductSource[], marketRates:
     const orderValue = valueByOrder.get(r.orderId) ?? 0;
     // Rounding each unit to the nearest cent keeps the total drift below half a cent per piece;
     // an exact split would need fractional cents, which cannot be stored.
-    const allocatedPerUnitCents = orderValue > 0 ? Math.round((extra * r.quantity * baseUnitCents) / orderValue / r.quantity) : 0;
+    const allocatedPerUnitCents = orderValue > 0 ? Math.round((extra * weightUnitCents) / orderValue) : 0;
     return {
       ...r,
       rates,
@@ -140,6 +164,7 @@ export function computeProductCosts(rows: readonly ProductSource[], marketRates:
       handlingPerUnitCents,
       landedUnitCents: baseUnitCents + allocatedPerUnitCents + handlingPerUnitCents,
       usesTheoreticalCost,
+      sharesBySalePrice,
     };
   });
 }
@@ -148,13 +173,18 @@ export function computeProductCosts(rows: readonly ProductSource[], marketRates:
 export interface CostOverrides {
   readonly theoreticalCents?: number | null;
   readonly handlingCents?: number | null;
+  /** Sale price being typed: it weighs the shipping share of a replacement without theoretical value. */
+  readonly saleCents?: number | null;
   readonly currency: Currency;
 }
 
 function applyOverrides(row: ProductSource, overrides: CostOverrides): ProductSource {
-  const { theoreticalCents, handlingCents, currency } = overrides;
+  const { theoreticalCents, handlingCents, saleCents, currency } = overrides;
   return {
     ...row,
+    ...(saleCents !== undefined
+      ? { salePriceCents: saleCents, saleCurrency: saleCents === null ? null : currency, saleSnapshot: null, marginBp: null }
+      : {}),
     // A value being typed now is worth what the market says today: it has no frozen rates yet.
     ...(theoreticalCents !== undefined
       ? { theoreticalCostCents: theoreticalCents, theoreticalCurrency: theoreticalCents === null ? null : currency, theoreticalSnapshot: null }
@@ -185,6 +215,39 @@ export function previewLandedCost(
   const line = computeProductCosts(orderRows, marketRates).find((p) => p.lineId === lineId);
   if (!line || line.landedUnitCents === null) return null;
   return convert(line.landedUnitCents, line.currency, display, line.rates);
+}
+
+const MAX_SALE_ITERATIONS = 60;
+/** A sale price so high that the line takes practically all of its order's shipping. */
+const CEILING_SALE_CENTS = 1_000_000_000;
+
+/**
+ * Sale price (display currency) that gives `marginBp` over the landed cost when that cost itself
+ * depends on the sale price (a replacement sharing shipping by its sale price). Iterates down from
+ * the highest possible price, so it lands on the meaningful fixed point and never on the trivial 0.
+ */
+export function saleForMarginPreview(
+  rows: readonly ProductSource[],
+  marketRates: FxRates,
+  lineId: number,
+  overrides: CostOverrides,
+  display: Currency,
+  marginBp: number,
+): number | null {
+  if (marginBp <= -10_000) return null;
+  const costWith = (sale: number | null) => previewLandedCost(rows, marketRates, lineId, { ...overrides, saleCents: sale, currency: display }, display);
+  // With the line weighing everything, it takes the whole shipping: the highest cost it can have.
+  const ceiling = costWith(CEILING_SALE_CENTS);
+  if (ceiling === null) return null;
+  let sale = salePriceFromMargin(ceiling, marginBp);
+  for (let i = 0; i < MAX_SALE_ITERATIONS; i++) {
+    const landed = costWith(sale);
+    if (landed === null) return null;
+    const next = salePriceFromMargin(landed, marginBp);
+    if (next === sale) break;
+    sale = next;
+  }
+  return sale;
 }
 
 /** 2500 → "25 %", 1250 → "12,5 %". */

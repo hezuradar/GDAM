@@ -4,6 +4,7 @@ import {
   marginFromSalePrice,
   previewLandedCost,
   productSaleInfo,
+  saleForMarginPreview,
   salePriceFromMargin,
   type ProductSource,
 } from '../landedCost';
@@ -87,6 +88,68 @@ describe('theoretical cost for zero-price replacements', () => {
   it('treats a zero-price line without theoretical value as zero cost', () => {
     const [line] = computeProductCosts([row({ unitPriceCents: 0 })], RATE);
     expect(line).toMatchObject({ landedUnitCents: 0, usesTheoreticalCost: false });
+  });
+});
+
+describe('zero-price replacements weighed by their sale price', () => {
+  const paid = row({ lineId: 1, unitPriceCents: 100, shippingCents: 500 }); // 10 × 1,00 US$ = 10,00 US$
+
+  it('gives a replacement without theoretical value its share of shipping by its sale price, at cost 0', () => {
+    // pesos: pagada 10,00 US$; reposición 10 × 4,00 = 40,00 US$ → envío 5,00 repartido 10/50 y 40/50
+    const [p, replacement] = computeProductCosts(
+      [paid, row({ lineId: 2, unitPriceCents: 0, shippingCents: 500, salePriceCents: 400, saleCurrency: 'USD' })],
+      RATE,
+    );
+    expect(p).toMatchObject({ allocatedPerUnitCents: 10, landedUnitCents: 110, sharesBySalePrice: false });
+    expect(replacement).toMatchObject({ allocatedPerUnitCents: 40, landedUnitCents: 40, usesTheoreticalCost: false, sharesBySalePrice: true });
+    expect(productSaleInfo(replacement, 'USD')).toMatchObject({ landedUnitCents: 40, salePriceCents: 400, marginBp: 90_000 });
+  });
+
+  it('converts the sale price to the order currency before weighing it', () => {
+    // 2,00 € = 2,20 US$ → pesos 10,00 y 22,00 US$
+    const [p, replacement] = computeProductCosts(
+      [paid, row({ lineId: 2, unitPriceCents: 0, shippingCents: 500, salePriceCents: 200, saleCurrency: 'EUR' })],
+      RATE,
+    );
+    expect(p.allocatedPerUnitCents).toBe(16);
+    expect(replacement.allocatedPerUnitCents).toBe(34);
+  });
+
+  it('prefers the theoretical value over the sale price', () => {
+    const [, replacement] = computeProductCosts(
+      [paid, row({ lineId: 2, unitPriceCents: 0, shippingCents: 500, theoreticalCostCents: 100, theoreticalCurrency: 'USD', salePriceCents: 999 })],
+      RATE,
+    );
+    expect(replacement).toMatchObject({ allocatedPerUnitCents: 25, landedUnitCents: 125, usesTheoreticalCost: true, sharesBySalePrice: false });
+  });
+
+  it('does not weigh by a margin alone, nor lines with a real price or a pending one', () => {
+    const [, byMargin, pending] = computeProductCosts(
+      [
+        paid,
+        row({ lineId: 2, unitPriceCents: 0, shippingCents: 500, marginBp: 5000 }),
+        row({ lineId: 3, unitPriceCents: null, shippingCents: 500, salePriceCents: 400 }),
+      ],
+      RATE,
+    );
+    expect(byMargin).toMatchObject({ allocatedPerUnitCents: 0, sharesBySalePrice: false });
+    expect(pending).toMatchObject({ landedUnitCents: null, sharesBySalePrice: false });
+  });
+
+  it('previews the cost with the sale price being typed', () => {
+    const rows = [paid, row({ lineId: 2, unitPriceCents: 0, shippingCents: 500 })];
+    expect(previewLandedCost(rows, RATE, 2, { saleCents: 400, currency: 'USD' }, 'USD')).toBe(40);
+    expect(previewLandedCost(rows, RATE, 2, { saleCents: null, currency: 'USD' }, 'USD')).toBe(0);
+  });
+
+  it('solves the sale price for a margin when the cost depends on it', () => {
+    const rows = [paid, row({ lineId: 2, unitPriceCents: 0, shippingCents: 500 })];
+    // 4,00 US$ de venta → 0,40 de envío → 900 % de beneficio
+    expect(saleForMarginPreview(rows, RATE, 2, { currency: 'USD' }, 'USD', 90_000)).toBe(400);
+    // sola en el pedido se lleva todo el envío: 0,50 US$ por unidad
+    expect(saleForMarginPreview([row({ unitPriceCents: 0, shippingCents: 500 })], RATE, 1, { currency: 'USD' }, 'USD', 10_000)).toBe(100);
+    expect(saleForMarginPreview(rows, RATE, 2, { currency: 'USD' }, 'USD', -10_000)).toBeNull();
+    expect(saleForMarginPreview(rows, RATE, 99, { currency: 'USD' }, 'USD', 5000)).toBeNull();
   });
 });
 

@@ -63,8 +63,13 @@ const ProductCard = memo(function ProductCard({
           {product.usesTheoreticalCost ? (
             <IconText icon="refresh-circle-outline">Reposición: en el pedido figura a {money(product.unitPriceCents ?? 0)}</IconText>
           ) : null}
-          {product.unitPriceCents === 0 && !product.usesTheoreticalCost ? (
-            <IconText icon="alert-circle-outline">Pieza a 0 (reposición): toca para poner un valor teórico</IconText>
+          {product.sharesBySalePrice ? (
+            <IconText icon="refresh-circle-outline">Reposición a coste 0: envío y aduanas repartidos según su precio de venta</IconText>
+          ) : null}
+          {product.unitPriceCents === 0 && !product.usesTheoreticalCost && !product.sharesBySalePrice ? (
+            <IconText icon="alert-circle-outline">
+              Pieza a 0 (reposición): pon su precio de venta para repartirle envío y aduanas
+            </IconText>
           ) : null}
           <InfoRow icon="airplane-outline" label="Envío + aduanas por unidad" value={`+ ${money(product.allocatedPerUnitCents ?? 0)}`} />
           {product.handlingPerUnitCents > 0 ? (
@@ -137,7 +142,8 @@ export default function ProductsScreen() {
           />
           <TextField label="Buscar producto" value={query} onChangeText={setQuery} autoCorrect={false} inputMode="search" />
           <Text style={styles.note}>
-            Envío y aduanas de cada pedido se reparten entre sus productos en proporción al importe de cada línea.
+            Envío y aduanas de cada pedido se reparten entre sus productos en proporción al importe de cada línea. Las
+            piezas de reposición a 0 cuentan con su valor teórico o, si no lo tienen, con su precio de venta.
           </Text>
         </View>
       }
