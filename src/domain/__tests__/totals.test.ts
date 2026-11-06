@@ -51,6 +51,8 @@ describe('orderTotals', () => {
       customsCents: 500,
       totalCents: 3000,
       pendingPriceCount: 0,
+      excludedCount: 0,
+      excludedCents: 0,
       rates: RATE,
       shippingRates: RATE,
       customsRates: RATE,
@@ -185,5 +187,33 @@ describe('customs count as paid', () => {
     const payments = [{ amountCents: 1000, currency: 'EUR' as const, snapshot: null }];
     expect(orderPaidCents(payments, 'EUR', RATE, 700)).toBe(1700);
     expect(orderPaidCents([], 'EUR', RATE, 0)).toBe(0);
+  });
+});
+
+describe('lines left out of the order', () => {
+  const lines = [
+    { quantity: 10, unitPriceCents: 100 }, // 10,00 €
+    { quantity: 2, unitPriceCents: 500, isExcluded: true }, // 10,00 € no enviado
+    { quantity: 1, unitPriceCents: null, isExcluded: true }, // sin precio, no enviado
+  ];
+
+  it('leaves excluded lines out of the total and of the pending prices', () => {
+    const totals = orderTotals({ ...baseOrder, shippingCents: 300 }, lines, RATE);
+    expect(totals).toMatchObject({ goodsCents: 1000, totalCents: 1300, pendingPriceCount: 0, excludedCount: 2, excludedCents: 1000 });
+  });
+
+  it('turns what was already paid for an excluded line into an overpayment', () => {
+    const before = orderTotals(baseOrder, lines.map((l) => ({ ...l, isExcluded: false })), RATE);
+    const after = orderTotals(baseOrder, lines, RATE);
+    expect(paymentSummary(before.totalCents, 1500)).toMatchObject({ status: 'parcial', pendingCents: 500 });
+    expect(paymentSummary(after.totalCents, 1500)).toMatchObject({ status: 'pagado', pendingCents: 0, overpaidCents: 500 });
+  });
+
+  it('counts a substitute line with its own price instead of the original', () => {
+    const swapped = [
+      { quantity: 10, unitPriceCents: 100, isExcluded: true },
+      { quantity: 10, unitPriceCents: 80 },
+    ];
+    expect(orderTotals(baseOrder, swapped, RATE)).toMatchObject({ goodsCents: 800, excludedCents: 1000 });
   });
 });

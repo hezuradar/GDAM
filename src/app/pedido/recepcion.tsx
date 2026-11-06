@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams } from 'expo-router';
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { saveReception } from '@/api/data';
 import { announce, confirmDestructive, showError } from '@/components/ui/alerts';
@@ -11,6 +11,7 @@ import { formatQuantity, plural } from '@/domain/exportText';
 import { parseDecimal } from '@/domain/money';
 import { receptionSummary } from '@/domain/reception';
 import type { OrderLine } from '@/domain/types';
+import { activeLines } from '@/domain/totals';
 import { useOrderDetail } from '@/hooks/useOrderDetail';
 import { goBack, parseIdParam } from '@/lib/params';
 import { MIN_TOUCH, spacing, typography, useTheme, useThemedStyles, type Theme } from '@/theme/theme';
@@ -78,7 +79,8 @@ export default function ReceptionScreen() {
 
   // Hooks must run on every render, so the derived values are computed before the early
   // returns below, with safe fallbacks while the order is still loading.
-  const lines = data?.lines ?? EMPTY_LINES;
+  // Lines left out of the order are neither expected nor charged.
+  const lines = useMemo(() => (data ? activeLines(data.lines) : EMPTY_LINES), [data]);
 
   // Seed once from what was saved before (later focus reloads must not discard the checklist).
   // Done while rendering, so the first frame with data already shows the saved quantities.

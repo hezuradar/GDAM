@@ -48,3 +48,10 @@ describe('receptionSummary', () => {
     expect(receptionSummary([]).isComplete).toBe(false);
   });
 });
+
+describe('reception of an order with lines left out', () => {
+  it('does not expect excluded lines to arrive', () => {
+    const summary = receptionSummary([line(1, 20, 20), { ...line(2, 5, null), isExcluded: true }]);
+    expect(summary).toMatchObject({ isComplete: true, lineCount: 1, missingLines: 0, missingPieces: 0 });
+  });
+});

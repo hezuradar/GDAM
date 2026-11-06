@@ -2,6 +2,7 @@ import { HttpError } from '../http';
 import {
   parseId,
   parseImportInput,
+  parseLineExclusion,
   parseLineInput,
   parseLinePricesInput,
   parseLinePricingInput,
@@ -202,5 +203,18 @@ describe('parseReceptionInput', () => {
       'repetidas',
     );
     expectBadRequest(() => parseReceptionInput({ lines: [], markReceived: true }), 'lines');
+  });
+});
+
+describe('parseLineExclusion', () => {
+  it('accepts a boolean', () => {
+    expect(parseLineExclusion({ isExcluded: true })).toBe(true);
+    expect(parseLineExclusion({ isExcluded: false })).toBe(false);
+  });
+
+  it('rejects anything else', () => {
+    expect(() => parseLineExclusion({ isExcluded: 1 })).toThrow(HttpError);
+    expect(() => parseLineExclusion({})).toThrow(HttpError);
+    expect(() => parseLineExclusion(null)).toThrow(HttpError);
   });
 });

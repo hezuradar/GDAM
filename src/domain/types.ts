@@ -63,6 +63,13 @@ export interface OrderLine {
   readonly rawText: string;
   /** Pieces that actually arrived (reception check); null = not checked yet. */
   readonly receivedQuantity: number | null;
+  /**
+   * Left out of the order (not sent, or swapped for another product). The line is kept for the
+   * record but counts nowhere: totals, payments, reception, shipping split or product costs.
+   */
+  readonly isExcluded: boolean;
+  /** Line this one replaces (a substitution agreed with the supplier); null = an ordinary line. */
+  readonly substitutesLineId: number | null;
 }
 
 export interface Payment {

@@ -1,5 +1,5 @@
 import { formatMoney } from './money';
-import { lineTotalCents, type OrderTotals } from './totals';
+import { activeLines, lineTotalCents, type OrderTotals } from './totals';
 import type { Currency, OrderLine } from './types';
 
 export interface OrderSummaryInput {
@@ -9,7 +9,9 @@ export interface OrderSummaryInput {
   readonly currency: Currency;
   readonly carrier: string;
   readonly trackingNumber: string;
-  readonly lines: readonly Pick<OrderLine, 'quantity' | 'pieceType' | 'measurements' | 'unitPriceCents'>[];
+  readonly lines: readonly (Pick<OrderLine, 'quantity' | 'pieceType' | 'measurements' | 'unitPriceCents'> & {
+    readonly isExcluded?: boolean;
+  })[];
   readonly totals: OrderTotals;
   readonly paidCents: number;
   readonly pendingCents: number;
@@ -33,7 +35,7 @@ export function formatQuantity(quantity: number): string {
 /** Plain-text summary formatted for WhatsApp (*bold*). */
 export function orderSummaryText(input: OrderSummaryInput): string {
   const money = (cents: number) => formatMoney(cents, input.currency);
-  const lines = input.lines.map((line) => {
+  const lines = activeLines(input.lines).map((line) => {
     const description = [formatQuantity(line.quantity), line.pieceType, line.measurements].filter(Boolean).join(' ');
     const total = lineTotalCents(line);
     if (total === null || line.unitPriceCents === null) return `• ${description} — precio pendiente`;

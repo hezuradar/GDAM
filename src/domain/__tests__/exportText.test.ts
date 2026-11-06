@@ -1,4 +1,5 @@
 import { orderSummaryText, plural } from '../exportText';
+import { orderTotals } from '../totals';
 
 describe('plural', () => {
   it('uses the singular only for exactly one', () => {
@@ -27,6 +28,8 @@ describe('orderSummaryText', () => {
         customsCents: 0,
         totalCents: 1250,
         pendingPriceCount: 1,
+        excludedCount: 0,
+        excludedCents: 0,
         rates: { usdMicros: 1_080_000, inrMicros: 100_000_000 },
         shippingRates: { usdMicros: 1_080_000, inrMicros: 100_000_000 },
         customsRates: { usdMicros: 1_080_000, inrMicros: 100_000_000 },
@@ -43,5 +46,27 @@ describe('orderSummaryText', () => {
     expect(text).toContain('*Total: 12,50 US$* (provisional, 1 precio pendiente)');
     expect(text).toContain('Pendiente de pago: 7,50 US$');
     expect(text).toContain('Seguimiento: DHL JD0001');
+  });
+});
+
+describe('orderSummaryText with lines left out', () => {
+  it('does not list lines that are not in the order', () => {
+    const text = orderSummaryText({
+      orderId: 1,
+      supplierName: 'Aceros',
+      orderDate: '2026-10-01',
+      currency: 'EUR',
+      carrier: '',
+      trackingNumber: '',
+      lines: [
+        { quantity: 1, pieceType: 'placa', measurements: '', unitPriceCents: 100 },
+        { quantity: 3, pieceType: 'tubo', measurements: '', unitPriceCents: 100, isExcluded: true },
+      ],
+      totals: orderTotals({ currency: 'EUR', shippingCents: 0, shippingCurrency: 'EUR', shippingSnapshot: null, customsCents: 0, customsCurrency: 'EUR', customsSnapshot: null, fxRateMicros: null }, [], { usdMicros: 1_100_000, inrMicros: 100_000_000 }),
+      paidCents: 0,
+      pendingCents: 0,
+    });
+    expect(text).toContain('placa');
+    expect(text).not.toContain('tubo');
   });
 });

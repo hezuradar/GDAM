@@ -5,6 +5,8 @@ export interface ReceptionLine {
   readonly quantity: number;
   /** null = not checked yet. */
   readonly receivedQuantity: number | null;
+  /** Lines left out of the order are not expected to arrive. */
+  readonly isExcluded?: boolean;
 }
 
 export interface ReceptionSummary {
@@ -24,7 +26,8 @@ export function missingPieces(line: ReceptionLine): number | null {
   return line.receivedQuantity === null ? null : Math.max(0, line.quantity - line.receivedQuantity);
 }
 
-export function receptionSummary(lines: readonly ReceptionLine[]): ReceptionSummary {
+export function receptionSummary(allLines: readonly ReceptionLine[]): ReceptionSummary {
+  const lines = allLines.filter((l) => !l.isExcluded);
   const isChecked = lines.some((l) => l.receivedQuantity !== null);
   const missing = lines.map((l) => missingPieces(l) ?? (isChecked ? l.quantity : 0));
   const completeLines = lines.filter((l, i) => l.receivedQuantity !== null && missing[i] === 0).length;

@@ -9,7 +9,7 @@ import { setDisplayCurrency, useDisplayCurrency } from '@/hooks/useDisplayCurren
 import { Button, ButtonRow, IconButton } from '@/components/ui/Button';
 import { ChipGroup } from '@/components/ui/ChipGroup';
 import { Card, EmptyState, ErrorView, FormScroll, InfoRow, LoadingView, PressableRow, SectionHeader } from '@/components/ui/Layout';
-import { deleteOrder, updateOrderStatus } from '@/api/data';
+import { deleteOrder, setLineExcluded, updateOrderStatus } from '@/api/data';
 import { orderDuration, type OrderDuration } from '@/domain/dates';
 import { formatDate, formatQuantity, orderSummaryText, plural } from '@/domain/exportText';
 import { receptionSummary } from '@/domain/reception';
@@ -57,6 +57,12 @@ export default function OrderDetailScreen() {
     router.push({ pathname, params: { orderId: order.id, ...extra } });
 
   const reception = receptionSummary(lines);
+  const includedCount = lines.filter((l) => !l.isExcluded).length;
+  const toggleLine = (lineId: number, isExcluded: boolean) =>
+    setLineExcluded(lineId, isExcluded)
+      .then(() => announce(isExcluded ? 'Línea quitada del pedido' : 'Línea incluida de nuevo'))
+      .then(reload)
+      .catch((e: unknown) => showError('No se pudo cambiar la línea', e));
   const duration = orderDuration(order);
   const changeStatus = (status: OrderStatus) =>
     // Receiving goes through the checklist so missing pieces are recorded.
@@ -150,8 +156,23 @@ export default function OrderDetailScreen() {
         )}
       </Card>
 
-      <SectionHeader title={`Productos (${lines.length})`} icon="cube-outline" action={<IconButton icon="add-circle-outline" label="Añadir línea" onPress={() => go('/pedido/linea')} />} />
-      {lines.length > 0 ? <LinesList lines={lines} currency={order.currency} rates={totals.rates} onPressLine={(lineId) => go('/pedido/linea', { id: lineId })} /> : null}
+      <SectionHeader
+        title={includedCount === lines.length ? `Productos (${lines.length})` : `Productos (${includedCount} de ${lines.length} incluidos)`}
+        icon="cube-outline"
+        action={<IconButton icon="add-circle-outline" label="Añadir línea" onPress={() => go('/pedido/linea')} />}
+      />
+      {lines.length > 0 ? (
+        <>
+          <Text style={styles.hint}>Desmarca lo que el proveedor no envía; toca una línea para cambiar pieza o precio, o sustituirla.</Text>
+          <LinesList
+            lines={lines}
+            currency={order.currency}
+            rates={totals.rates}
+            onPressLine={(lineId) => go('/pedido/linea', { id: lineId })}
+            onToggleLine={toggleLine}
+          />
+        </>
+      ) : null}
       <Button
         variant={lines.length === 0 ? 'primary' : 'secondary'}
         icon="clipboard-outline"
@@ -209,5 +230,6 @@ const makeStyles = (theme: Theme) =>
     title: { ...typography.title, color: theme.colors.text, flexShrink: 1 },
     supplierRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
     body: { ...typography.body, color: theme.colors.text },
+    hint: { ...typography.footnote, color: theme.colors.textSecondary },
     warning: { ...typography.callout, color: theme.colors.warning.fg, fontWeight: '600' },
   });

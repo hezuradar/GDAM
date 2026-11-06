@@ -93,6 +93,11 @@ export async function saveLine(orderId: number, input: LineInput, id: number | n
   return id;
 }
 export const deleteLine = (id: number) => apiRequest('DELETE', `/lines/${id}`);
+/** Leaves a line out of its order (not sent) or puts it back; it stops counting in totals and payments. */
+export const setLineExcluded = (id: number, isExcluded: boolean) => apiRequest('PATCH', `/lines/${id}/exclusion`, { isExcluded });
+/** Swaps a line for another product: the new line is added and the original is left out, atomically. */
+export const substituteLine = async (id: number, input: LineInput): Promise<number> =>
+  (await apiRequest<Created>('POST', `/lines/${id}/substitute`, input)).id;
 /** Saves what arrived of each line; with `markReceived` the order also becomes "recibido". */
 export const saveReception = (
   orderId: number,

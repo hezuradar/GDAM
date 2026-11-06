@@ -109,6 +109,13 @@ export function parseStatus(raw: unknown): OrderStatus {
   return oneOf<OrderStatus>(asObject(raw), 'status', ORDER_STATUSES);
 }
 
+/** Whether a line is left out of its order. */
+export function parseLineExclusion(raw: unknown): boolean {
+  const body = asObject(raw);
+  if (typeof body.isExcluded !== 'boolean') throw badRequest('«isExcluded» debe ser true o false');
+  return body.isExcluded;
+}
+
 export function parseLineInput(raw: unknown): LineInput {
   const body = asObject(raw);
   const quantity = body.quantity;

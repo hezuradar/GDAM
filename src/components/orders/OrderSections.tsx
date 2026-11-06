@@ -1,4 +1,5 @@
-import { StyleSheet, Text, View } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { formatDate, formatQuantity } from '@/domain/exportText';
 import { displayAmount, formatMoney, formatRate, type FxRates } from '@/domain/money';
 import { useDisplayCurrency } from '@/hooks/useDisplayCurrency';
@@ -7,7 +8,7 @@ import { lineTotalCents, type OrderTotals } from '@/domain/totals';
 import { missingPieces } from '@/domain/reception';
 import type { Currency, OrderLine, Payment } from '@/domain/types';
 import { PAYMENT_METHOD_LABEL } from '@/i18n/es';
-import { spacing, typography, useThemedStyles, type Theme } from '@/theme/theme';
+import { spacing, typography, useTheme, useThemedStyles, type Theme } from '@/theme/theme';
 import { PaymentBadge, PendingPriceBadge } from '../ui/Badges';
 import { Card, InfoRow, PressableRow } from '../ui/Layout';
 import { PaymentMeter } from '../ui/Visuals';
@@ -34,6 +35,14 @@ export function TotalsCard({ totals, payment, currency, usesOrderRate }: TotalsC
   return (
     <Card>
       <InfoRow icon="cube-outline" label="Mercancía" value={money(totals.goodsCents)} />
+      {totals.excludedCount > 0 ? (
+        <InfoRow
+          icon="remove-circle-outline"
+          label={`No incluido (${totals.excludedCount === 1 ? '1 línea' : `${totals.excludedCount} líneas`})`}
+          value={`− ${money(totals.excludedCents)}`}
+          detail="No enviado o sustituido: ya está descontado del total y de lo pendiente"
+        />
+      ) : null}
       <InfoRow
         icon="airplane-outline"
         label="Envío"
@@ -65,7 +74,15 @@ export function TotalsCard({ totals, payment, currency, usesOrderRate }: TotalsC
       )}
       <InfoRow icon="checkmark-circle-outline" label="Pagado" value={money(payment.paidCents)} />
       <InfoRow icon="hourglass-outline" label="Pendiente de pago" value={money(payment.pendingCents)} isStrong />
-      {payment.overpaidCents > 0 ? <InfoRow icon="alert-circle-outline" label="Pagado de más" value={money(payment.overpaidCents)} /> : null}
+      {payment.overpaidCents > 0 ? (
+        <InfoRow
+          icon="alert-circle-outline"
+          label="Pagado de más (a tu favor)"
+          value={money(payment.overpaidCents)}
+          detail="Pide al proveedor el reembolso o descuéntalo del próximo pedido"
+          isStrong
+        />
+      ) : null}
       {totals.pendingPriceCount > 0 ? (
         <View style={styles.badges}>
           <PendingPriceBadge count={totals.pendingPriceCount} />
@@ -85,7 +102,39 @@ type LinesListProps = {
   currency: Currency;
   rates: FxRates;
   onPressLine: (id: number) => void;
+  /** Ticks a line in or out of the order; without it no checkbox is shown. */
+  onToggleLine?: (id: number, isExcluded: boolean) => void;
 };
+
+const describeLine = (line: Pick<OrderLine, 'quantity' | 'pieceType' | 'measurements'>) =>
+  [formatQuantity(line.quantity), line.pieceType, line.measurements].filter(Boolean).join(' ');
+
+/** "Sustituye a …" / "Sustituida por …" for lines that take part in a substitution. */
+function substitutionText(line: OrderLine, lines: readonly OrderLine[]): string | null {
+  const original = line.substitutesLineId === null ? null : lines.find((l) => l.id === line.substitutesLineId);
+  if (original) return `Sustituye a: ${describeLine(original)}`;
+  const replacement = lines.find((l) => l.substitutesLineId === line.id);
+  return replacement ? `Sustituida por: ${describeLine(replacement)}` : null;
+}
+
+function LineCheckbox({ line, onToggle }: { line: OrderLine; onToggle: (id: number, isExcluded: boolean) => void }) {
+  const theme = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  const isIncluded = !line.isExcluded;
+  return (
+    <Pressable
+      onPress={() => onToggle(line.id, isIncluded)}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: isIncluded }}
+      accessibilityLabel={`Incluir ${describeLine(line)} en el pedido`}
+      accessibilityHint={isIncluded ? 'Desmarca si el proveedor no la envía' : 'Marca para volver a contarla'}
+      hitSlop={spacing.sm}
+      style={({ pressed }) => [styles.checkbox, pressed && styles.dimmed]}
+    >
+      <Ionicons name={isIncluded ? 'checkbox' : 'square-outline'} size={26} color={isIncluded ? theme.colors.primary : theme.colors.textSecondary} />
+    </Pressable>
+  );
+}
 
 /** "✓ Recibida" or "Faltan 2 de 20" once the reception has been checked; null before. */
 function receptionText(line: OrderLine): string | null {
@@ -94,7 +143,7 @@ function receptionText(line: OrderLine): string | null {
   return missing === 0 ? '✓ Recibida' : `Faltan ${formatQuantity(missing)} de ${formatQuantity(line.quantity)}`;
 }
 
-export function LinesList({ lines, currency, rates, onPressLine }: LinesListProps) {
+export function LinesList({ lines, currency, rates, onPressLine, onToggleLine }: LinesListProps) {
   const styles = useThemedStyles(makeStyles);
   const display = useDisplayCurrency();
   const money = (cents: number) => {
@@ -105,24 +154,32 @@ export function LinesList({ lines, currency, rates, onPressLine }: LinesListProp
     <Card>
       {lines.map((line, index) => {
         const total = lineTotalCents(line);
-        const description = [formatQuantity(line.quantity), line.pieceType, line.measurements].filter(Boolean).join(' ');
+        const description = describeLine(line);
         const priceText =
           line.unitPriceCents === null || total === null
             ? 'Precio pendiente'
             : `${money(line.unitPriceCents)}/ud · ${money(total)}`;
+        const substitution = substitutionText(line, lines);
+        const reception = line.isExcluded ? null : receptionText(line);
+        const notes = [line.isExcluded ? 'No incluida: no cuenta en el total ni en los pagos' : null, substitution, reception].filter(Boolean);
         return (
-          <View key={line.id} style={index > 0 ? styles.separated : undefined}>
-            <PressableRow
-              onPress={() => onPressLine(line.id)}
-              accessibilityLabel={`${description}. ${priceText}${receptionText(line) ? `. ${receptionText(line)}` : ''}`}
-              accessibilityHint="Editar línea o añadir precio"
-            >
-              <Text style={styles.lineTitle}>{description}</Text>
-              <Text style={line.unitPriceCents === null ? styles.pendingPrice : styles.secondary}>{priceText}</Text>
-              {receptionText(line) ? (
-                <Text style={missingPieces(line) ? styles.pendingPrice : styles.secondary}>{receptionText(line)}</Text>
-              ) : null}
-            </PressableRow>
+          <View key={line.id} style={[styles.lineRow, index > 0 && styles.separated]}>
+            {onToggleLine ? <LineCheckbox line={line} onToggle={onToggleLine} /> : null}
+            <View style={styles.lineBody}>
+              <PressableRow
+                onPress={() => onPressLine(line.id)}
+                accessibilityLabel={[description, priceText, ...notes].join('. ')}
+                accessibilityHint="Editar línea, cambiar precio o sustituir"
+              >
+                <Text style={[styles.lineTitle, line.isExcluded && styles.excluded]}>{description}</Text>
+                <Text style={line.isExcluded ? [styles.secondary, styles.excluded] : line.unitPriceCents === null ? styles.pendingPrice : styles.secondary}>
+                  {priceText}
+                </Text>
+                {line.isExcluded ? <Text style={styles.secondary}>No incluida: no cuenta en el total ni en los pagos</Text> : null}
+                {substitution ? <Text style={styles.substitution}>{substitution}</Text> : null}
+                {reception ? <Text style={missingPieces(line) ? styles.pendingPrice : styles.secondary}>{reception}</Text> : null}
+              </PressableRow>
+            </View>
           </View>
         );
       })}
@@ -174,4 +231,10 @@ const makeStyles = (theme: Theme) =>
     lineTitle: { ...typography.body, color: theme.colors.text },
     secondary: { ...typography.footnote, color: theme.colors.textSecondary },
     pendingPrice: { ...typography.footnote, color: theme.colors.warning.fg, fontWeight: '700' },
+    lineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+    lineBody: { flex: 1 },
+    checkbox: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+    dimmed: { opacity: 0.6 },
+    excluded: { textDecorationLine: 'line-through', color: theme.colors.textSecondary },
+    substitution: { ...typography.footnote, color: theme.colors.primary, fontWeight: '600' },
   });

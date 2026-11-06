@@ -29,6 +29,7 @@ interface OrderRow {
 interface LineRow {
   id: number; order_id: number; position: number; quantity: number; piece_type: string;
   measurements: string; unit_price_cents: number | null; raw_text: string; received_quantity: number | null;
+  is_excluded: number; substitutes_line_id: number | null;
 }
 interface PaymentRow {
   id: number; order_id: number; amount_cents: number; currency: Currency; paid_on: string;
@@ -51,6 +52,7 @@ const toOrder = (r: OrderRow): Order => ({
 const toLine = (r: LineRow): OrderLine => ({
   id: r.id, orderId: r.order_id, position: r.position, quantity: r.quantity, pieceType: r.piece_type,
   measurements: r.measurements, unitPriceCents: r.unit_price_cents, rawText: r.raw_text, receivedQuantity: r.received_quantity,
+  isExcluded: r.is_excluded === 1, substitutesLineId: r.substitutes_line_id,
 });
 const toPayment = (r: PaymentRow): Payment => ({
   id: r.id, orderId: r.order_id, amountCents: r.amount_cents, currency: r.currency, paidOn: r.paid_on,
@@ -61,7 +63,8 @@ const SUPPLIER_COLUMNS = 'id, name, whatsapp, notes';
 const ORDER_COLUMNS = `id, supplier_id, order_date, status, currency, shipping_cents, shipping_currency,
   customs_cents, customs_currency, fx_rate_micros, carrier, tracking_number, notes,
   shipping_fx_rate_micros, shipping_inr_rate_micros, customs_fx_rate_micros, customs_inr_rate_micros, received_date`;
-const LINE_COLUMNS = 'id, order_id, position, quantity, piece_type, measurements, unit_price_cents, raw_text, received_quantity';
+const LINE_COLUMNS = `id, order_id, position, quantity, piece_type, measurements, unit_price_cents, raw_text, received_quantity,
+  is_excluded, substitutes_line_id`;
 const PAYMENT_COLUMNS = 'id, order_id, amount_cents, currency, paid_on, method, fx_rate_micros, note, inr_rate_micros';
 
 async function all<T>(db: D1Database, sql: string, ...params: unknown[]): Promise<T[]> {
@@ -271,7 +274,8 @@ export async function listLines(db: D1Database, orderId: number): Promise<OrderL
 export async function listAllLinesForList(db: D1Database) {
   const rows = await all<Pick<LineRow, 'order_id' | 'quantity' | 'unit_price_cents' | 'piece_type' | 'measurements'>>(
     db,
-    'SELECT order_id, quantity, unit_price_cents, piece_type, measurements FROM order_lines',
+    // Lines left out of an order count nowhere: totals, payments, stats and search skip them.
+    'SELECT order_id, quantity, unit_price_cents, piece_type, measurements FROM order_lines WHERE is_excluded = 0',
   );
   return rows.map((r) => ({
     orderId: r.order_id,
@@ -295,13 +299,19 @@ async function nextPosition(db: D1Database, orderId: number): Promise<number> {
   return ((await first<{ p: number | null }>(db, 'SELECT MAX(position) AS p FROM order_lines WHERE order_id = ?', orderId))?.p ?? 0) + 1;
 }
 
-function insertLineStatement(db: D1Database, orderId: number, position: number, line: LineInput): D1PreparedStatement {
+function insertLineStatement(
+  db: D1Database,
+  orderId: number,
+  position: number,
+  line: LineInput,
+  substitutesLineId: number | null = null,
+): D1PreparedStatement {
   return db
     .prepare(
-      `INSERT INTO order_lines (order_id, position, quantity, piece_type, measurements, unit_price_cents, raw_text)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO order_lines (order_id, position, quantity, piece_type, measurements, unit_price_cents, raw_text, substitutes_line_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    .bind(orderId, position, line.quantity, line.pieceType, line.measurements, line.unitPriceCents, line.rawText);
+    .bind(orderId, position, line.quantity, line.pieceType, line.measurements, line.unitPriceCents, line.rawText, substitutesLineId);
 }
 
 export async function createLine(db: D1Database, orderId: number, input: LineInput): Promise<number> {
@@ -316,6 +326,26 @@ export async function updateLine(db: D1Database, id: number, input: LineInput): 
     .bind(input.quantity, input.pieceType, input.measurements, input.unitPriceCents, id)
     .run();
   await requireChanged(result, 'Línea');
+}
+
+/** Takes a line out of the order (not sent) or puts it back; the line itself is kept. */
+export async function setLineExcluded(db: D1Database, id: number, isExcluded: boolean): Promise<void> {
+  const result = await db.prepare('UPDATE order_lines SET is_excluded = ? WHERE id = ?').bind(isExcluded ? 1 : 0, id).run();
+  await requireChanged(result, 'Línea');
+}
+
+/**
+ * Swaps a line for another product agreed with the supplier, atomically: the new line is added
+ * at the end of the order, pointing at it, and the original is left out (kept for the record).
+ */
+export async function substituteLine(db: D1Database, id: number, input: LineInput): Promise<number> {
+  const original = await first<{ order_id: number }>(db, 'SELECT order_id FROM order_lines WHERE id = ?', id);
+  if (!original) throw notFound('Línea');
+  const [, inserted] = await db.batch([
+    db.prepare('UPDATE order_lines SET is_excluded = 1 WHERE id = ?').bind(id),
+    insertLineStatement(db, original.order_id, await nextPosition(db, original.order_id), input, id),
+  ]);
+  return inserted.meta.last_row_id;
 }
 
 export async function deleteLine(db: D1Database, id: number): Promise<void> {
@@ -425,7 +455,7 @@ export async function listProducts(db: D1Database) {
      FROM order_lines l
      JOIN orders o ON o.id = l.order_id
      LEFT JOIN suppliers s ON s.id = o.supplier_id
-     WHERE o.status != 'cancelado'
+     WHERE o.status != 'cancelado' AND l.is_excluded = 0
      ORDER BY o.order_date DESC, o.id DESC, l.position, l.id`,
   );
   return rows.map((r) => ({

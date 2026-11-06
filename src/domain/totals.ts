@@ -12,7 +12,7 @@ export type OrderMoneyFields = Pick<
   | 'customsSnapshot'
   | 'fxRateMicros'
 >;
-export type LineMoneyFields = Pick<OrderLine, 'quantity' | 'unitPriceCents'>;
+export type LineMoneyFields = Pick<OrderLine, 'quantity' | 'unitPriceCents'> & { readonly isExcluded?: boolean };
 
 export interface OrderTotals {
   readonly goodsCents: number;
@@ -20,6 +20,10 @@ export interface OrderTotals {
   readonly customsCents: number;
   readonly totalCents: number;
   readonly pendingPriceCount: number;
+  /** Lines left out of the order: they are not charged, so they are not in the total. */
+  readonly excludedCount: number;
+  /** What the excluded lines were worth (order currency, priced ones only). */
+  readonly excludedCents: number;
   /** Rates actually used: the order's frozen EUR→USD rate (if any) over the market rates. */
   readonly rates: FxRates;
   /** Rates used for the shipping and for the customs: each keeps the rates frozen when it was entered. */
@@ -35,7 +39,14 @@ export function effectiveRates(order: Pick<Order, 'fxRateMicros'>, marketRates: 
   return withUsdRate(marketRates, order.fxRateMicros);
 }
 
-/** All amounts are returned in the order currency. Lines without price count as 0. */
+export function activeLines<T extends { readonly isExcluded?: boolean }>(lines: readonly T[]): T[] {
+  return lines.filter((line) => !line.isExcluded);
+}
+
+/**
+ * All amounts are returned in the order currency. Lines without price count as 0; excluded lines
+ * (not sent or swapped) count nowhere, so what is pending to pay follows any change to the order.
+ */
 export function orderTotals(
   order: OrderMoneyFields,
   lines: readonly LineMoneyFields[],
@@ -44,7 +55,8 @@ export function orderTotals(
   const rates = effectiveRates(order, marketRates);
   const shippingRates = amountRates(marketRates, order.shippingSnapshot, order.fxRateMicros);
   const customsRates = amountRates(marketRates, order.customsSnapshot, order.fxRateMicros);
-  const lineTotals = lines.map(lineTotalCents);
+  const lineTotals = activeLines(lines).map(lineTotalCents);
+  const excluded = lines.filter((line) => line.isExcluded);
   const goodsCents = lineTotals.reduce<number>((sum, total) => sum + (total ?? 0), 0);
   const pendingPriceCount = lineTotals.filter((total) => total === null).length;
   const shippingCents = convert(order.shippingCents, order.shippingCurrency, order.currency, shippingRates);
@@ -56,6 +68,8 @@ export function orderTotals(
     customsCents,
     totalCents: goodsCents + shippingCents + customsCents,
     pendingPriceCount,
+    excludedCount: excluded.length,
+    excludedCents: excluded.reduce((sum, line) => sum + (lineTotalCents(line) ?? 0), 0),
     rates,
     shippingRates,
     customsRates,

@@ -18,6 +18,7 @@ import {
 import { formatQuantity, plural } from '@/domain/exportText';
 import { currencySymbol, formatMoney, parseAmount } from '@/domain/money';
 import type { OrderLine } from '@/domain/types';
+import { activeLines } from '@/domain/totals';
 import { useOrderDetail } from '@/hooks/useOrderDetail';
 import { goBack, parseIdParam } from '@/lib/params';
 import { MIN_TOUCH, spacing, typography, useTheme, useThemedStyles, type Theme } from '@/theme/theme';
@@ -81,7 +82,8 @@ export default function DistributeTotalScreen() {
 
   // Hooks must run on every render, so the derived values are computed before the early
   // returns below, with safe fallbacks while the order is still loading.
-  const lines = data?.lines ?? EMPTY_LINES;
+  // Lines left out of the order are neither expected nor charged.
+  const lines = useMemo(() => (data ? activeLines(data.lines) : EMPTY_LINES), [data]);
   const totals = data?.totals;
   const extrasCents = totals ? totals.shippingCents + totals.customsCents : 0;
   const excludedCents = excludedPricedCents(lines, excluded);

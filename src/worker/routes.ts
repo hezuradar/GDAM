@@ -4,6 +4,7 @@ import * as repo from './repo';
 import {
   parseId,
   parseImportInput,
+  parseLineExclusion,
   parseLineInput,
   parseLinePricesInput,
   parseLinePricingInput,
@@ -90,6 +91,12 @@ const routes: readonly Route[] = [
     const [products, settings] = await Promise.all([repo.listProducts(db), repo.getSettings(db)]);
     return json({ products, settings });
   }],
+  ['PATCH', path('/lines/:id/exclusion'), async ({ db, params, request }) => {
+    await repo.setLineExcluded(db, parseId(params[0]), parseLineExclusion(await readJson(request)));
+    return json({ ok: true });
+  }],
+  ['POST', path('/lines/:id/substitute'), async ({ db, params, request }) =>
+    json({ id: await repo.substituteLine(db, parseId(params[0]), parseLineInput(await readJson(request))) }, 201)],
   ['PATCH', path('/lines/:id/pricing'), async ({ db, params, request }) => {
     await repo.updateLinePricing(db, parseId(params[0]), parseLinePricingInput(await readJson(request)));
     return json({ ok: true });
