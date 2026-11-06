@@ -5,9 +5,11 @@ import { listProducts, loadOrderListRaw } from '@/api/data';
 import { ChipGroup } from '@/components/ui/ChipGroup';
 import { Card, EmptyState, ErrorView, FormScroll, InfoRow, LoadingView, SectionHeader } from '@/components/ui/Layout';
 import { StatTile } from '@/components/ui/Visuals';
+import { OverheadSection, PriceChangesSection, WarehouseSection } from '@/components/stats/InventorySections';
 import { BarList, RankList, type RankItem } from '@/components/stats/StatsParts';
 import { formatQuantity, plural } from '@/domain/exportText';
 import { computeProductCosts, formatMargin } from '@/domain/landedCost';
+import { overheadStats, priceChanges, warehouseStats } from '@/domain/inventory';
 import { formatMoney, marketRates } from '@/domain/money';
 import { profitStats, spendStats, type ProductProfit } from '@/domain/stats';
 import { CURRENCIES, type Currency } from '@/domain/types';
@@ -34,12 +36,15 @@ export default function StatsScreen() {
     return {
       spend: spendStats({ orders, lines, payments, suppliers, marketRates: marketRates(settings) }, currency),
       profit: profitStats(data.products, currency),
+      warehouse: warehouseStats(data.products, currency),
+      overhead: overheadStats(data.products, currency),
+      prices: priceChanges(data.products, currency),
     };
   }, [data, currency]);
 
   if (error) return <ErrorView message={error} onRetry={reload} />;
   if (!stats) return loading ? <LoadingView /> : null;
-  const { spend, profit } = stats;
+  const { spend, profit, warehouse, overhead, prices } = stats;
   if (spend.orderCount === 0) {
     return <EmptyState icon="stats-chart-outline" title="Aún no hay datos" message="Las estadísticas aparecen cuando registres pedidos." />;
   }
@@ -106,6 +111,10 @@ export default function StatsScreen() {
           </Card>
         </>
       ) : null}
+
+      <WarehouseSection warehouse={warehouse} currency={currency} onOpenProduct={openProduct} />
+      <OverheadSection overhead={overhead} currency={currency} onOpenProduct={openProduct} />
+      <PriceChangesSection changes={prices} currency={currency} onOpenProduct={openProduct} />
 
       <SectionHeader title="Beneficio previsto" icon="trending-up-outline" />
       {profit.withSaleCount === 0 ? (

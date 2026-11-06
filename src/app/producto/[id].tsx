@@ -3,11 +3,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { listProducts, saveLinePricing } from '@/api/data';
 import { announce, announceErrors, showError } from '@/components/ui/alerts';
+import { PriceHistoryCard } from '@/components/products/PriceHistoryCard';
 import { Button } from '@/components/ui/Button';
 import { ChipGroup } from '@/components/ui/ChipGroup';
 import { Card, EmptyState, ErrorView, FormScroll, InfoRow, LoadingView, SectionHeader } from '@/components/ui/Layout';
 import { TextField } from '@/components/ui/TextField';
 import { formatQuantity } from '@/domain/exportText';
+import { priceHistory } from '@/domain/inventory';
 import {
   computeProductCosts,
   formatMargin,
@@ -47,11 +49,18 @@ export default function ProductPricingScreen() {
   const lineId = parseIdParam(useLocalSearchParams<{ id: string }>().id) ?? 0;
   const styles = useThemedStyles(makeStyles);
   // The other lines of the order are kept too: a theoretical value changes how shipping is shared.
-  const load = useCallback(async (): Promise<{ product: ProductCost; orderRows: ProductSource[]; market: FxRates } | null> => {
+  // All products are kept as well, for the price history of the same product in other orders.
+  const load = useCallback(async (): Promise<{
+    product: ProductCost;
+    orderRows: ProductSource[];
+    costs: ProductCost[];
+    market: FxRates;
+  } | null> => {
     const { products, settings } = await listProducts();
     const market = marketRates(settings);
-    const product = computeProductCosts(products, market).find((p) => p.lineId === lineId);
-    return product ? { product, orderRows: products.filter((p) => p.orderId === product.orderId), market } : null;
+    const costs = computeProductCosts(products, market);
+    const product = costs.find((p) => p.lineId === lineId);
+    return product ? { product, orderRows: products.filter((p) => p.orderId === product.orderId), costs, market } : null;
   }, [lineId]);
   const { data, error, loading, reload } = useLoader(load);
   const product = data?.product ?? null;
@@ -340,6 +349,7 @@ export default function ProductPricingScreen() {
           isDisabled={isSaving}
         />
       ) : null}
+      <PriceHistoryCard points={priceHistory(data?.costs ?? [], product.lineId, currency)} currency={currency} currentLineId={product.lineId} />
     </FormScroll>
   );
 }

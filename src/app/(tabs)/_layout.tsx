@@ -17,6 +17,13 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen
+        name="panel"
+        options={{
+          title: 'Panel',
+          tabBarIcon: ({ color, size }) => <Ionicons name="grid-outline" color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
         name="index"
         options={{
           title: 'Pedidos',

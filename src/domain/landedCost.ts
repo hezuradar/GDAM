@@ -1,13 +1,17 @@
 import { amountRates, convert, withUsdRate, type FxRates } from './money';
-import type { Currency, FxSnapshot } from './types';
+import type { Currency, FxSnapshot, OrderStatus } from './types';
 
 /** One purchased product (order line) with what is needed to know its real unit cost. */
 export interface ProductSource {
   readonly lineId: number;
   readonly orderId: number;
   readonly orderDate: string;
+  /** Tells what is already in the warehouse (received) from what is still on its way. */
+  readonly orderStatus: OrderStatus;
   readonly supplierName: string;
   readonly quantity: number;
+  /** Pieces that actually arrived (reception check); null = not checked. */
+  readonly receivedQuantity: number | null;
   readonly pieceType: string;
   readonly measurements: string;
   readonly unitPriceCents: number | null;

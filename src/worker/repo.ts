@@ -428,8 +428,8 @@ export async function setLinePrices(db: D1Database, orderId: number, input: Line
 // ---------- Products (lines with their order context) ----------
 
 interface ProductRow {
-  line_id: number; order_id: number; order_date: string; supplier_name: string | null; quantity: number;
-  piece_type: string; measurements: string; unit_price_cents: number | null; currency: Currency;
+  line_id: number; order_id: number; order_date: string; order_status: OrderStatus; supplier_name: string | null;
+  quantity: number; received_quantity: number | null; piece_type: string; measurements: string; unit_price_cents: number | null; currency: Currency;
   shipping_cents: number; shipping_currency: Currency; customs_cents: number; customs_currency: Currency;
   fx_rate_micros: number | null; sale_price_cents: number | null; sale_currency: Currency | null; margin_bp: number | null;
   theoretical_cost_cents: number | null; theoretical_currency: Currency | null;
@@ -445,7 +445,8 @@ interface ProductRow {
 export async function listProducts(db: D1Database) {
   const rows = await all<ProductRow>(
     db,
-    `SELECT l.id AS line_id, o.id AS order_id, o.order_date, s.name AS supplier_name, l.quantity, l.piece_type,
+    `SELECT l.id AS line_id, o.id AS order_id, o.order_date, o.status AS order_status, s.name AS supplier_name,
+            l.quantity, l.received_quantity, l.piece_type,
             l.measurements, l.unit_price_cents, o.currency, o.shipping_cents, o.shipping_currency, o.customs_cents,
             o.customs_currency, o.fx_rate_micros, l.sale_price_cents, l.sale_currency, l.margin_bp,
             l.theoretical_cost_cents, l.theoretical_currency, l.handling_cost_cents, l.handling_currency,
@@ -459,8 +460,8 @@ export async function listProducts(db: D1Database) {
      ORDER BY o.order_date DESC, o.id DESC, l.position, l.id`,
   );
   return rows.map((r) => ({
-    lineId: r.line_id, orderId: r.order_id, orderDate: r.order_date, supplierName: r.supplier_name ?? '',
-    quantity: r.quantity, pieceType: r.piece_type, measurements: r.measurements, unitPriceCents: r.unit_price_cents,
+    lineId: r.line_id, orderId: r.order_id, orderDate: r.order_date, orderStatus: r.order_status,
+    supplierName: r.supplier_name ?? '', quantity: r.quantity, receivedQuantity: r.received_quantity, pieceType: r.piece_type, measurements: r.measurements, unitPriceCents: r.unit_price_cents,
     currency: r.currency, shippingCents: r.shipping_cents, shippingCurrency: r.shipping_currency,
     customsCents: r.customs_cents, customsCurrency: r.customs_currency, fxRateMicros: r.fx_rate_micros,
     salePriceCents: r.sale_price_cents, saleCurrency: r.sale_currency, marginBp: r.margin_bp,

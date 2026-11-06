@@ -13,27 +13,56 @@ const percentOf = (part: number, total: number) => (total > 0 ? Math.round((part
  */
 export function BarList({ items, currency, total }: { items: readonly AmountShare[]; currency: Currency; total?: number }) {
   const styles = useThemedStyles(makeStyles);
-  const theme = useTheme();
   const max = Math.max(0, ...items.map((i) => i.cents));
   return (
     <View style={styles.list}>
-      {items.map((item) => {
-        const width = max > 0 ? Math.max(item.cents > 0 ? 2 : 0, Math.round((item.cents * 100) / max)) : 0;
-        const value = `${formatMoney(item.cents, currency)}${total !== undefined ? ` · ${percentOf(item.cents, total)} %` : ''}`;
-        return (
-          <View key={item.key} style={styles.barRow} accessible accessibilityLabel={`${item.label}: ${value}`}>
-            <View style={styles.barHeader}>
-              <Text style={styles.label} numberOfLines={1}>
-                {item.label}
-              </Text>
-              <Text style={styles.value}>{value}</Text>
-            </View>
-            <View style={styles.track}>
-              {width > 0 ? <View style={[styles.fill, { width: `${width}%`, backgroundColor: theme.colors.primary }]} /> : null}
-            </View>
-          </View>
-        );
-      })}
+      {items.map((item) => (
+        <BarRow
+          key={item.key}
+          label={item.label}
+          value={`${formatMoney(item.cents, currency)}${total !== undefined ? ` · ${percentOf(item.cents, total)} %` : ''}`}
+          amount={item.cents}
+          max={max}
+        />
+      ))}
+    </View>
+  );
+}
+
+export interface CountItem {
+  readonly key: string;
+  readonly label: string;
+  readonly count: number;
+}
+
+/** Same bars as BarList for plain counts (orders per status…). */
+export function CountBars({ items }: { items: readonly CountItem[] }) {
+  const styles = useThemedStyles(makeStyles);
+  const max = Math.max(0, ...items.map((i) => i.count));
+  return (
+    <View style={styles.list}>
+      {items.map((item) => (
+        <BarRow key={item.key} label={item.label} value={String(item.count)} amount={item.count} max={max} />
+      ))}
+    </View>
+  );
+}
+
+function BarRow({ label, value, amount, max }: { label: string; value: string; amount: number; max: number }) {
+  const styles = useThemedStyles(makeStyles);
+  const theme = useTheme();
+  const width = max > 0 ? Math.max(amount > 0 ? 2 : 0, Math.round((amount * 100) / max)) : 0;
+  return (
+    <View style={styles.barRow} accessible accessibilityLabel={`${label}: ${value}`}>
+      <View style={styles.barHeader}>
+        <Text style={styles.label} numberOfLines={1}>
+          {label}
+        </Text>
+        <Text style={styles.value}>{value}</Text>
+      </View>
+      <View style={styles.track}>
+        {width > 0 ? <View style={[styles.fill, { width: `${width}%`, backgroundColor: theme.colors.primary }]} /> : null}
+      </View>
     </View>
   );
 }
